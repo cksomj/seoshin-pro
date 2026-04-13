@@ -966,36 +966,38 @@ function showPdfContent(fileId,title,fromScreen,searchKeyword){
 var pdfCurrentFileId=''; // 현재 열린 파일 ID 저장
 
 function pdfSearchNext(fileId, title, keyword){
-  // 같은 파일이 열려 있으면 현재 페이지 다음부터 탐색
   if(pdfDoc && pdfCurrentFileId===fileId){
+    // 전체화면 열기
     document.getElementById('pdf-fullscreen').style.display='flex';
     pdfIsFullscreen=true;
     var searchFrom=pdfCurrentPage+1;
-    if(searchFrom>pdfTotalPages) searchFrom=1; // 끝이면 처음부터
+    if(searchFrom>pdfTotalPages) searchFrom=1;
 
-    document.getElementById('pdf-loading').style.display='block';
-    document.getElementById('pdf-loading').textContent='"'+keyword+'" 다음 위치 찾는 중... ('+searchFrom+'페이지~)';
+    var loadEl=document.getElementById('pdf-loading');
+    loadEl.style.display='block';
+    loadEl.textContent='"'+keyword+'" 다음 위치 찾는 중... ('+searchFrom+'페이지~)';
 
     findPageWithKeywordFrom(keyword, searchFrom).then(function(pageNum){
-      document.getElementById('pdf-loading').style.display='none';
       if(pageNum===0){
-        // 못 찾으면 처음부터 다시
-        document.getElementById('pdf-loading').style.display='block';
-        document.getElementById('pdf-loading').textContent='처음부터 다시 찾는 중...';
-        findPageWithKeywordFrom(keyword, 1).then(function(p){
-          document.getElementById('pdf-loading').style.display='none';
+        loadEl.textContent='처음부터 다시 찾는 중...';
+        return findPageWithKeywordFrom(keyword, 1).then(function(p){
+          loadEl.style.display='none';
           pdfCurrentPage=p||1;
-          renderPdfPage(pdfCurrentPage);
-          showCopyToast(p?'📖 '+p+'페이지로 이동 (처음부터 다시 검색)':'결과 없음');
+          setTimeout(function(){
+            pdfFitScreen();
+          },50);
+          showCopyToast(p?'📖 '+p+'페이지 (처음부터 다시 검색)':'결과 없음');
         });
       } else {
+        loadEl.style.display='none';
         pdfCurrentPage=pageNum;
-        renderPdfPage(pdfCurrentPage);
+        setTimeout(function(){
+          pdfFitScreen();
+        },50);
         showCopyToast('📖 '+pageNum+'페이지로 이동');
       }
     });
   } else {
-    // 다른 파일이면 새로 열기
     showPdfContent(fileId, title, 's-search', keyword);
   }
 }
@@ -1221,8 +1223,12 @@ function pdfFitScreen(){
   pdfIsFullscreen=true;
   pdfDoc.getPage(pdfCurrentPage).then(function(page){
     var wrap=document.getElementById('pdf-fs-wrap');
+    var availW=Math.max(wrap.offsetWidth-32, window.innerWidth-64);
+    var availH=Math.max(wrap.offsetHeight-32, window.innerHeight-120);
     var vp=page.getViewport({scale:1});
-    pdfScale=Math.min((wrap.offsetWidth-32)/vp.width,(wrap.offsetHeight-32)/vp.height);
+    var scaleW=availW/vp.width;
+    var scaleH=availH/vp.height;
+    pdfScale=Math.max(0.3, Math.min(scaleW, scaleH));
     renderPdfPage(pdfCurrentPage);
   });
 }
