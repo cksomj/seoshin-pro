@@ -392,7 +392,12 @@ label.field-label{font-size:12px;color:var(--text3);display:block;margin-bottom:
     </div>
     <div style="border-top:1px solid #f0f0f0;margin-top:10px;padding-top:10px;">
       <div style="font-size:12px;color:#999;margin-bottom:6px;">색인 관리 — 검색이 안 될 때 사용</div>
-      <button class="sub-btn" style="color:#1a73e8;border-color:#e8f0fe;background:#f8fbff;" onclick="reindexAll()">전체 색인 재생성 →</button>
+      <button class="sub-btn" style="color:#1a73e8;border-color:#e8f0fe;background:#f8fbff;" onclick="reindexAll(false)">
+        ⚡ 스마트 색인 (새 파일만) →
+      </button>
+      <button class="sub-btn" style="color:#555;border-color:#eee;background:#fafafa;font-size:13px;" onclick="reindexAll(true)">
+        🔄 전체 색인 재생성 →
+      </button>
       <div id="reindex-status" style="font-size:12px;color:#1a73e8;margin-top:4px;min-height:16px;"></div>
     </div>
   </div>
@@ -1456,7 +1461,7 @@ function doSearch(){
 }
 
 // ── 색인 전체 재생성 ────────────────────────────────────────────
-function reindexAll(){
+function reindexAll(forceAll){
   if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
   var status=document.getElementById('reindex-status');
   status.textContent='드라이브에서 파일 목록 가져오는 중...';
@@ -1477,11 +1482,32 @@ function reindexAll(){
   })).then(function(results){
     var allFiles=results.reduce(function(a,b){return a.concat(b);},[]);
     if(!allFiles.length){status.textContent='드라이브에 PDF 파일이 없습니다.';return;}
-    status.textContent='총 '+allFiles.length+'개 파일 색인 중... (0/'+allFiles.length+')';
 
+    // 이미 색인된 파일 스킵 (forceAll=true 면 전체 재생성)
+    var toIndex=forceAll?allFiles:allFiles.filter(function(f){
+      var existing=indexDB.find(function(r){return r.id===f.id;});
+      return !existing||!existing.body; // 색인 없거나 본문 비어있는 것만
+    });
+
+    var skipped=allFiles.length-toIndex.length;
+    if(!toIndex.length){
+      status.textContent='모두 색인 완료 상태입니다. ('+skipped+'개 스킵)';
+      return;
+    }
+    status.textContent='총 '+toIndex.length+'개 색인 중... ('+skipped+'개 스킵)';
+
+    // 5개씩 병렬 처리
+    var BATCH=5;
     var done=0;
-    return allFiles.reduce(function(chain,file){
-      return chain.then(function(){
+    var total=toIndex.length;
+
+    function processBatch(startIdx){
+      if(startIdx>=total){
+        status.textContent='✅ 완료! '+total+'개 색인 생성 ('+skipped+'개 기존 유지)';
+        return Promise.resolve();
+      }
+      var batch=toIndex.slice(startIdx,startIdx+BATCH);
+      return Promise.all(batch.map(function(file){
         return fetch('https://www.googleapis.com/drive/v3/files/'+file.id+'?alt=media',{
           headers:{Authorization:'Bearer '+accessToken}
         }).then(function(r){return r.arrayBuffer();})
@@ -1489,15 +1515,17 @@ function reindexAll(){
           .then(function(result){
             addToIndex(file.id,file.name,file.type,result.text);
             done++;
-            status.textContent='색인 중... ('+done+'/'+allFiles.length+'): '+file.name;
+            status.textContent='색인 중... ('+done+'/'+total+'): '+file.name;
           }).catch(function(){
             addToIndex(file.id,file.name,file.type,'');
             done++;
           });
+      })).then(function(){
+        return processBatch(startIdx+BATCH);
       });
-    },Promise.resolve()).then(function(){
-      status.textContent='완료! 총 '+allFiles.length+'개 서신 색인이 생성됐습니다.';
-    });
+    }
+
+    return processBatch(0);
   }).catch(function(e){
     status.textContent='오류: '+e.message;
   });
