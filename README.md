@@ -1,0 +1,1 @@
+# seoshin-pro
