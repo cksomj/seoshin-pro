@@ -936,6 +936,7 @@ function showPdfContent(fileId,title,fromScreen,searchKeyword){
   document.getElementById('pdf-loading').textContent='PDF 불러오는 중...';
   pdfScale=1.0; pdfIsFullscreen=true;
   pdfSearchKeyword=searchKeyword||'';
+  pdfCurrentFileId=fileId||'';
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.getElementById('s-pdf-view').classList.add('active');
   document.getElementById('pdf-fullscreen').style.display='flex';
@@ -961,7 +962,65 @@ function showPdfContent(fileId,title,fromScreen,searchKeyword){
   }).catch(function(e){document.getElementById('pdf-loading').textContent='오류: '+e.message;});
 }
 
-// 검색어 하이라이트 - 캔버스에 노란색 박스 그리기
+// 계속 검색 - 현재 페이지 다음부터 검색어 탐색
+var pdfCurrentFileId=''; // 현재 열린 파일 ID 저장
+
+function pdfSearchNext(fileId, title, keyword){
+  // 같은 파일이 열려 있으면 현재 페이지 다음부터 탐색
+  if(pdfDoc && pdfCurrentFileId===fileId){
+    document.getElementById('pdf-fullscreen').style.display='flex';
+    pdfIsFullscreen=true;
+    var searchFrom=pdfCurrentPage+1;
+    if(searchFrom>pdfTotalPages) searchFrom=1; // 끝이면 처음부터
+
+    document.getElementById('pdf-loading').style.display='block';
+    document.getElementById('pdf-loading').textContent='"'+keyword+'" 다음 위치 찾는 중... ('+searchFrom+'페이지~)';
+
+    findPageWithKeywordFrom(keyword, searchFrom).then(function(pageNum){
+      document.getElementById('pdf-loading').style.display='none';
+      if(pageNum===0){
+        // 못 찾으면 처음부터 다시
+        document.getElementById('pdf-loading').style.display='block';
+        document.getElementById('pdf-loading').textContent='처음부터 다시 찾는 중...';
+        findPageWithKeywordFrom(keyword, 1).then(function(p){
+          document.getElementById('pdf-loading').style.display='none';
+          pdfCurrentPage=p||1;
+          renderPdfPage(pdfCurrentPage);
+          showCopyToast(p?'📖 '+p+'페이지로 이동 (처음부터 다시 검색)':'결과 없음');
+        });
+      } else {
+        pdfCurrentPage=pageNum;
+        renderPdfPage(pdfCurrentPage);
+        showCopyToast('📖 '+pageNum+'페이지로 이동');
+      }
+    });
+  } else {
+    // 다른 파일이면 새로 열기
+    showPdfContent(fileId, title, 's-search', keyword);
+  }
+}
+
+// 특정 페이지부터 검색어 탐색 (0=못찾음)
+function findPageWithKeywordFrom(keyword, fromPage){
+  if(!pdfDoc||pdfTotalPages===0) return Promise.resolve(0);
+  var re=new RegExp(escRe(keyword),'i');
+  var result=Promise.resolve(0);
+  for(var i=fromPage;i<=pdfTotalPages;i++){
+    (function(pageNum){
+      result=result.then(function(found){
+        if(found>0) return found;
+        return pdfDoc.getPage(pageNum).then(function(page){
+          return page.getTextContent({normalizeWhitespace:true}).then(function(content){
+            var text=content.items.map(function(item){return item.str;}).join('');
+            var textSpaced=content.items.map(function(item){return item.str;}).join(' ');
+            return (re.test(text)||re.test(textSpaced))?pageNum:0;
+          });
+        }).catch(function(){return 0;});
+      });
+    })(i);
+  }
+  return result;
+}
 function highlightKeyword(page, viewport, canvas, keyword){
   if(!keyword) return;
   var re=new RegExp(escRe(keyword),'gi');
@@ -1448,13 +1507,17 @@ function doSearch(){
     var typeBg=r.type==='book'?'background:#eaf3de;color:#27500a;':'';
     var authorStr=r.author?(' · '+r.author):'';
     var currentKeyword=document.getElementById('search-input').value.trim();
+    var safeId=r.id.replace(/'/g,"\\'");
+    var safeName=r.name.replace(/'/g,"\\'");
+    var safeKw=currentKeyword.replace(/'/g,"\\'");
     html+='<div class="result-item">'
       +'<div class="result-title">'+titleHl+'</div>'
       +'<div class="result-meta"><span style="'+typeBg+'padding:1px 6px;border-radius:10px;font-size:11px;">'+typeLabel+'</span> · '+r.date+authorStr+'</div>'
       +(snippet?'<div class="result-snippet" style="margin-top:5px;">'+snippet+'</div>':'')
       +'<div class="result-actions">'
-      +'<button class="small-btn" onclick="showPdfContent(\''+r.id+'\',\''+r.name.replace(/'/g,"\\'")+'\',\'s-search\',\''+currentKeyword.replace(/'/g,"\\'")+'\''+')">'
-      +'내용보기</button>'
+      +'<button class="small-btn" onclick="showPdfContent(\''+safeId+'\',\''+safeName+'\',\'s-search\',\''+safeKw+'\')">내용보기</button>'
+      +'<button class="small-btn" style="color:#1e7e34;border-color:#c0dd97;background:#f4faec;" '
+      +'onclick="pdfSearchNext(\''+safeId+'\',\''+safeName+'\',\''+safeKw+'\')">▶ 계속 검색</button>'
       +'</div></div>';
   });
   document.getElementById('search-results').innerHTML=html;
