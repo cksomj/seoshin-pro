@@ -926,7 +926,7 @@ var pdfScale=1.0;
 var pdfIsFullscreen=false;
 var pdfSearchKeyword='';
 
-function showPdfContent(fileId,title,fromScreen,searchKeyword){
+function showPdfContent(fileId,title,fromScreen,searchKeyword,resultIdx){
   pdfFromScreen=fromScreen||'s-list';
   document.getElementById('pdf-title').textContent=title;
   document.getElementById('pdf-fs-title').textContent=title;
@@ -941,29 +941,159 @@ function showPdfContent(fileId,title,fromScreen,searchKeyword){
   document.getElementById('s-pdf-view').classList.add('active');
   document.getElementById('pdf-fullscreen').style.display='flex';
 
+  // 현재 스니펫의 페이지 번호 (계속검색으로 바뀐 위치 반영)
+  var targetPage=1;
+  if(resultIdx!=null && window._searchState && window._searchState[resultIdx]){
+    targetPage=window._searchState[resultIdx].page||1;
+  }
+
   if(!fileId||!isSignedIn){document.getElementById('pdf-loading').textContent='구글 로그인 후 실제 내용이 표시됩니다.';return;}
   fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+accessToken}})
   .then(function(r){return r.arrayBuffer();})
   .then(function(buf){return pdfjsLib.getDocument({data:buf}).promise;})
   .then(function(doc){
-    pdfDoc=doc;pdfTotalPages=doc.numPages;pdfCurrentPage=1;
+    pdfDoc=doc;pdfTotalPages=doc.numPages;
+    pdfCurrentPage=Math.min(Math.max(targetPage,1),doc.numPages);
     document.getElementById('pdf-loading').style.display='none';
-    if(searchKeyword){
-      document.getElementById('pdf-loading').style.display='block';
-      document.getElementById('pdf-loading').textContent='"'+searchKeyword+'" 가 있는 페이지 찾는 중...';
-      findPageWithKeyword(searchKeyword).then(function(pageNum){
-        pdfCurrentPage=pageNum;
-        document.getElementById('pdf-loading').style.display='none';
-        setTimeout(pdfFitScreen,60);
-      });
-    } else {
-      setTimeout(pdfFitScreen,60);
-    }
+    setTimeout(pdfFitScreen,60);
   }).catch(function(e){document.getElementById('pdf-loading').textContent='오류: '+e.message;});
 }
 
-// 계속 검색 - 현재 페이지 다음부터 검색어 탐색
-var pdfCurrentFileId=''; // 현재 열린 파일 ID 저장
+// 이전 스니펫으로 이동
+function searchPrevSnippet(ri, keyword){
+  var state=window._searchState&&window._searchState[ri];
+  if(!state||!state.body) return;
+  var re=new RegExp(escRe(keyword),'gi');
+  var body=state.body;
+
+  // 현재 위치 이전에서 모든 매칭 찾기
+  var allMatches=[];
+  var m;
+  re.lastIndex=0;
+  while((m=re.exec(body))!==null){
+    if(m.index>=state.lastIdx) break;
+    allMatches.push(m.index);
+  }
+
+  var idx;
+  if(allMatches.length===0){
+    // 이전이 없으면 맨 마지막으로
+    re.lastIndex=0;
+    var lastMatch=null;
+    while((m=re.exec(body))!==null) lastMatch=m;
+    if(!lastMatch){
+      document.getElementById('snip-'+ri).innerHTML='<span style="color:#bbb;font-size:12px;">더 이상 결과가 없습니다.</span>';
+      return;
+    }
+    idx=lastMatch.index;
+    showCopyToast('맨 끝으로 이동합니다');
+  } else {
+    idx=allMatches[allMatches.length-1];
+  }
+
+  // 새 스니펫 생성
+  var start=Math.max(0,idx-50);
+  var end=Math.min(body.length,idx+100);
+  var raw=(start>0?'...':'')+body.slice(start,end)+(end<body.length?'...':'');
+  var newSnippet=raw.replace(new RegExp(escRe(keyword),'gi'),function(m){return '<mark>'+m+'</mark>';});
+
+  // 페이지 계산
+  var before=body.slice(0,idx);
+  var page=(before.match(/--- 다음 페이지 ---/g)||[]).length+1;
+
+  // 상태 업데이트
+  state.lastIdx=idx;
+  state.page=page;
+
+  // 화면 업데이트
+  document.getElementById('snip-'+ri).innerHTML=newSnippet;
+  document.getElementById('snip-page-'+ri).textContent='📄 '+page+'페이지';
+
+  // 카드 강조
+  var card=document.getElementById('ri-'+ri);
+  card.style.borderColor='#1a73e8';
+  card.style.background='#f8fbff';
+  setTimeout(function(){card.style.borderColor='';card.style.background='';},1200);
+}
+
+// 이전 스니펫으로 이동
+function searchPrevSnippet(ri, keyword){
+  var state=window._searchState&&window._searchState[ri];
+  if(!state||!state.body) return;
+  var re=new RegExp(escRe(keyword),'gi');
+  var body=state.body;
+
+  // 현재 위치 이전에 있는 모든 매치를 찾아서 바로 앞 것을 선택
+  var matches=[];
+  var m;
+  re.lastIndex=0;
+  while((m=re.exec(body))!==null){
+    if(m.index>=state.lastIdx) break;
+    matches.push(m.index);
+  }
+
+  if(!matches.length){
+    // 앞에 없으면 마지막으로 이동
+    re.lastIndex=0;
+    var allMatches=[];
+    while((m=re.exec(body))!==null) allMatches.push(m.index);
+    if(!allMatches.length){
+      document.getElementById('snip-'+ri).innerHTML='<span style="color:#bbb;font-size:12px;">결과가 없습니다.</span>';
+      return;
+    }
+    var idx=allMatches[allMatches.length-1];
+    showCopyToast('마지막 결과로 이동합니다');
+    updateSnippet(ri, keyword, body, idx);
+  } else {
+    var idx=matches[matches.length-1];
+    updateSnippet(ri, keyword, body, idx);
+  }
+}
+
+// 다음 스니펫으로 이동
+function searchNextSnippet(ri, keyword){
+  var state=window._searchState&&window._searchState[ri];
+  if(!state||!state.body) return;
+  var re=new RegExp(escRe(keyword),'gi');
+  var body=state.body;
+
+  re.lastIndex=state.lastIdx+1;
+  var match=re.exec(body);
+
+  if(!match){
+    re.lastIndex=0;
+    match=re.exec(body);
+    if(!match){
+      document.getElementById('snip-'+ri).innerHTML='<span style="color:#bbb;font-size:12px;">더 이상 결과가 없습니다.</span>';
+      document.getElementById('snip-page-'+ri).textContent='';
+      return;
+    }
+    showCopyToast('처음부터 다시 검색합니다');
+  }
+  updateSnippet(ri, keyword, body, match.index);
+}
+
+// 스니펫 업데이트 공통 함수
+function updateSnippet(ri, keyword, body, idx){
+  var start=Math.max(0,idx-50);
+  var end=Math.min(body.length,idx+100);
+  var raw=(start>0?'...':'')+body.slice(start,end)+(end<body.length?'...':'');
+  var newSnippet=raw.replace(new RegExp(escRe(keyword),'gi'),function(m){return '<mark>'+m+'</mark>';});
+  var before=body.slice(0,idx);
+  var page=(before.match(/--- 다음 페이지 ---/g)||[]).length+1;
+
+  window._searchState[ri].lastIdx=idx;
+  window._searchState[ri].page=page;
+
+  document.getElementById('snip-'+ri).innerHTML=newSnippet;
+  document.getElementById('snip-page-'+ri).textContent='📄 '+page+'페이지';
+
+  var card=document.getElementById('ri-'+ri);
+  card.style.borderColor='#1a73e8';
+  card.style.background='#f8fbff';
+  setTimeout(function(){card.style.borderColor='';card.style.background='';},1000);
+}
+
 
 function pdfSearchNext(fileId, title, keyword){
   if(pdfDoc && pdfCurrentFileId===fileId){
@@ -1497,33 +1627,51 @@ function doSearch(){
     html+=indexDB.length===0?'서신을 먼저 저장소에 업로드해 주세요.':'저장된 서신 '+indexDB.length+'건 중 일치하는 내용이 없습니다.';
     html+='</div>';
   }
-  results.forEach(function(r){
+
+  // 각 결과별 현재 스니펫 위치 저장 (계속검색용)
+  window._searchState=[];
+
+  results.forEach(function(r, ri){
     var titleHl=r.name.replace(re,function(m){return '<mark>'+m+'</mark>';});
-    var snippet='';
-    if(r.body){
-      var idx=r.body.search(re);
-      if(idx>=0){
-        var start=Math.max(0,idx-50);
-        var end=Math.min(r.body.length,idx+100);
-        var raw=(start>0?'...':'')+r.body.slice(start,end)+(end<r.body.length?'...':'');
-        snippet=raw.replace(re,function(m){return '<mark>'+m+'</mark>';});
-      }
-    }
     var typeLabel=r.type==='monthly'?'월별서신':r.type==='separate'?'별도서신':'📖 서적';
     var typeBg=r.type==='book'?'background:#eaf3de;color:#27500a;':'';
     var authorStr=r.author?(' · '+r.author):'';
-    var currentKeyword=document.getElementById('search-input').value.trim();
     var safeId=r.id.replace(/'/g,"\\'");
     var safeName=r.name.replace(/'/g,"\\'");
-    var safeKw=currentKeyword.replace(/'/g,"\\'");
-    html+='<div class="result-item">'
+    var safeKw=v.replace(/'/g,"\\'");
+
+    // 첫 번째 스니펫 위치 찾기
+    var firstIdx=r.body?r.body.search(re):-1;
+    var snippet='';
+    var snippetPage=1;
+    if(firstIdx>=0&&r.body){
+      var start=Math.max(0,firstIdx-50);
+      var end=Math.min(r.body.length,firstIdx+100);
+      var raw=(start>0?'...':'')+r.body.slice(start,end)+(end<r.body.length?'...':'');
+      snippet=raw.replace(re,function(m){return '<mark>'+m+'</mark>';});
+      // 페이지 계산 (--- 다음 페이지 --- 구분자 기준)
+      var before=r.body.slice(0,firstIdx);
+      snippetPage=(before.match(/--- 다음 페이지 ---/g)||[]).length+1;
+    }
+
+    // 상태 저장
+    window._searchState[ri]={
+      body:r.body||'',
+      lastIdx:firstIdx,
+      page:snippetPage
+    };
+
+    html+='<div class="result-item" id="ri-'+ri+'">'
       +'<div class="result-title">'+titleHl+'</div>'
       +'<div class="result-meta"><span style="'+typeBg+'padding:1px 6px;border-radius:10px;font-size:11px;">'+typeLabel+'</span> · '+r.date+authorStr+'</div>'
-      +(snippet?'<div class="result-snippet" style="margin-top:5px;">'+snippet+'</div>':'')
+      +'<div class="result-snippet" id="snip-'+ri+'" style="margin-top:5px;min-height:36px;">'+(snippet||'<span style="color:#bbb;font-size:12px;">본문 미리보기 없음</span>')+'</div>'
+      +'<div style="font-size:11px;color:#999;margin-top:3px;" id="snip-page-'+ri+'">'+(firstIdx>=0?'📄 '+snippetPage+'페이지':'')+'</div>'
       +'<div class="result-actions">'
-      +'<button class="small-btn" onclick="showPdfContent(\''+safeId+'\',\''+safeName+'\',\'s-search\',\''+safeKw+'\')">내용보기</button>'
+      +'<button class="small-btn" onclick="showPdfContent(\''+safeId+'\',\''+safeName+'\',\'s-search\',\''+safeKw+'\','+ri+')">내용보기</button>'
+      +'<button class="small-btn" style="color:#555;border-color:#ddd;background:#f4f4f4;" '
+      +'onclick="searchPrevSnippet('+ri+',\''+safeKw+'\')">◀ 이전</button>'
       +'<button class="small-btn" style="color:#1e7e34;border-color:#c0dd97;background:#f4faec;" '
-      +'onclick="pdfSearchNext(\''+safeId+'\',\''+safeName+'\',\''+safeKw+'\')">▶ 계속 검색</button>'
+      +'onclick="searchNextSnippet('+ri+',\''+safeKw+'\')">▶ 다음</button>'
       +'</div></div>';
   });
   document.getElementById('search-results').innerHTML=html;
