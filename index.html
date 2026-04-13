@@ -1,0 +1,1737 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>서신관리프로 Ver.1</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if(typeof pdfjsLib!=='undefined'){
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --blue:#1a73e8;--blue-dark:#1557b0;--blue-light:#e8f0fe;--blue-mid:#4285f4;
+  --bg:#f0f4ff;--surface:#fff;--surface2:#f8faff;
+  --text:#1a1a2e;--text2:#4a5568;--text3:#9aa5b4;
+  --border:#dde3f0;--radius:14px;--radius-sm:10px;
+  --shadow:0 2px 12px rgba(26,115,232,0.08);
+}
+body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var(--bg);min-height:100vh;color:var(--text);}
+.app{max-width:480px;margin:0 auto;padding:16px;min-height:100vh;}
+.screen{display:none;}
+.screen.active{display:block;}
+
+/* PDF 텍스트 선택 레이어 */
+.pdf-text-layer-active{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  overflow:hidden;line-height:1;
+  user-select:text;-webkit-user-select:text;
+  cursor:text;
+}
+.pdf-text-layer-active span{
+  color:transparent;
+  position:absolute;
+  white-space:pre;
+  cursor:text;
+  transform-origin:0% 0%;
+}
+.pdf-text-layer-active span::selection{
+  background:rgba(26,115,232,0.35);
+  color:transparent;
+}
+/* 복사 완료 토스트 */
+#copy-toast{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  background:#1a202c;color:#fff;padding:10px 20px;border-radius:20px;
+  font-size:13px;font-weight:500;z-index:99999;
+  opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap;
+}
+
+/* 카드 */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.25rem;margin-bottom:12px;box-shadow:var(--shadow);}
+
+/* 헤더 */
+.screen-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.back-btn{display:flex;align-items:center;gap:4px;font-size:13px;padding:7px 14px;border:1.5px solid var(--border);border-radius:20px;background:var(--surface);cursor:pointer;color:var(--text2);font-weight:500;}
+.back-btn:hover{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
+.screen-title{font-size:18px;font-weight:700;color:var(--text);flex:1;}
+
+/* 버튼 */
+.primary-btn{display:block;width:100%;padding:13px;font-size:15px;font-weight:600;border:none;border-radius:var(--radius-sm);background:var(--blue);color:#fff;cursor:pointer;margin-top:10px;transition:background .15s;}
+.primary-btn:hover{background:var(--blue-dark);}
+.primary-btn:disabled{background:#b0bec5;cursor:not-allowed;}
+.sec-btn{display:block;width:100%;padding:11px;font-size:14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text2);cursor:pointer;margin-top:8px;transition:all .15s;}
+.sec-btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-light);}
+.sub-btn{display:block;width:100%;padding:12px 16px;text-align:left;font-size:14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer;color:var(--text);margin-bottom:8px;transition:all .15s;}
+.sub-btn:hover{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
+
+/* 입력 */
+input[type=text],input[type=date],textarea{width:100%;padding:11px 14px;font-size:14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-family:inherit;transition:border .15s;}
+input:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,115,232,0.12);}
+label.field-label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px;margin-top:12px;font-weight:500;}
+.info-box{background:var(--blue-light);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#1557b0;margin-bottom:10px;line-height:1.6;border:1px solid #c5d8fc;}
+
+/* 로그인 화면 */
+.login-wrap{text-align:center;padding:3rem 0 1rem;}
+.app-logo{font-size:28px;font-weight:800;background:linear-gradient(135deg,#1a73e8,#4285f4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px;}
+.app-ver{font-size:13px;color:var(--text3);margin-bottom:2.5rem;}
+.login-icon-wrap{width:80px;height:80px;background:var(--blue-light);border-radius:24px;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;}
+.google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);cursor:pointer;font-size:15px;font-weight:500;color:var(--text);transition:all .15s;}
+.google-btn:hover{border-color:var(--blue);background:var(--blue-light);}
+
+/* 유저바 */
+.user-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--blue-light);border-radius:var(--radius-sm);margin-bottom:14px;font-size:13px;color:var(--blue);border:1px solid #c5d8fc;}
+.user-dot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex-shrink:0;}
+
+/* 메인 버튼 - 아이콘 + 큰 글씨 */
+.main-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px;}
+.main-card-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 12px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;transition:all .18s;text-align:center;min-height:100px;}
+.main-card-btn:hover{border-color:var(--blue);background:var(--blue-light);transform:translateY(-2px);box-shadow:0 4px 16px rgba(26,115,232,0.13);}
+.main-card-btn:active{transform:translateY(0);}
+.main-card-btn .btn-icon{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
+.main-card-btn .btn-label{font-size:14px;font-weight:700;color:var(--text);line-height:1.3;}
+.main-card-btn .btn-desc{font-size:11px;color:var(--text3);margin-top:3px;}
+.main-card-btn-full{display:flex;align-items:center;gap:14px;padding:16px 18px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;transition:all .18s;width:100%;margin-bottom:10px;}
+.main-card-btn-full:hover{border-color:var(--blue);background:var(--blue-light);transform:translateX(3px);}
+.main-card-btn-full .btn-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.main-card-btn-full .btn-texts{text-align:left;}
+.main-card-btn-full .btn-label{font-size:15px;font-weight:700;color:var(--text);}
+.main-card-btn-full .btn-desc{font-size:12px;color:var(--text3);margin-top:2px;}
+
+/* 배지 */
+.badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:500;}
+.b-blue{background:#e8f0fe;color:#1a73e8;}
+.b-teal{background:#e6f4ea;color:#1e7e34;}
+.b-amber{background:#fef3e2;color:#b35c00;}
+.b-coral{background:#fce8e6;color:#c5221f;}
+.b-pink{background:#fce8f3;color:#9c1f6e;}
+
+/* 검색 */
+.search-wrap{position:relative;margin-bottom:6px;}
+.search-input{width:100%;padding:12px 16px;font-size:14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);}
+.search-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,115,232,0.12);}
+.ac-box{border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);overflow:hidden;margin-bottom:8px;box-shadow:var(--shadow);}
+.ac-item{padding:10px 16px;font-size:13px;cursor:pointer;color:var(--text);border-bottom:1px solid var(--border);}
+.ac-item:last-child{border-bottom:none;}
+.ac-item:hover{background:var(--blue-light);}
+.ac-kw{color:var(--blue);font-weight:700;}
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.filter-chip{font-size:12px;padding:6px 13px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);cursor:pointer;color:var(--text2);font-weight:500;transition:all .15s;}
+.filter-chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+.search-btn{width:100%;padding:12px;font-size:15px;font-weight:700;border:none;border-radius:var(--radius-sm);background:var(--blue);color:#fff;cursor:pointer;margin-bottom:12px;transition:background .15s;}
+.search-btn:hover{background:var(--blue-dark);}
+.result-item{border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px;background:var(--surface);transition:border .15s;}
+.result-item:hover{border-color:var(--blue);}
+.result-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px;}
+.result-meta{font-size:11px;color:var(--text3);margin-bottom:6px;}
+.result-snippet{font-size:13px;color:var(--text2);line-height:1.6;}
+.result-snippet mark{background:#fff3b0;color:#7a5000;border-radius:2px;padding:0 2px;}
+.result-actions{display:flex;gap:6px;margin-top:8px;}
+.small-btn{font-size:12px;padding:6px 12px;border:1.5px solid var(--border);border-radius:20px;background:var(--surface);cursor:pointer;color:var(--text2);font-weight:500;transition:all .15s;}
+.small-btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-light);}
+
+/* 오늘 검색 */
+.check-item{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);}
+.check-item:last-child{border-bottom:none;}
+.check-label{flex:1;font-size:13px;color:var(--text);cursor:pointer;line-height:1.5;font-weight:500;}
+.check-meta{font-size:11px;color:var(--text3);margin-top:2px;}
+.del-btn{font-size:11px;padding:4px 9px;border:1.5px solid #fca5a5;border-radius:20px;color:#c5221f;background:transparent;cursor:pointer;}
+.bottom-bar{display:flex;gap:8px;margin-top:14px;}
+.half-btn{flex:1;padding:12px;font-size:14px;border:1.5px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-weight:600;transition:all .15s;}
+.half-btn.blue{background:var(--blue);color:#fff;border-color:var(--blue);}
+.half-btn.blue:hover{background:var(--blue-dark);}
+.half-btn.gray{background:var(--surface);color:var(--text2);}
+.half-btn.gray:hover{background:var(--blue-light);border-color:var(--blue);color:var(--blue);}
+
+/* 내 저장소 탭 */
+.tab-row{display:flex;border:1.5px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:12px;}
+.tab{flex:1;padding:10px;text-align:center;font-size:13px;cursor:pointer;color:var(--text2);background:var(--surface2);font-weight:500;transition:all .15s;}
+.tab.on{background:var(--blue);color:#fff;font-weight:700;}
+.hist-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.hist-row:last-child{border-bottom:none;}
+.hist-kw{font-size:13px;color:var(--text);flex:1;font-weight:500;}
+.hist-cnt{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--blue-light);color:var(--blue);font-weight:600;}
+.hist-time{font-size:11px;color:var(--text3);}
+
+/* 미리보기 */
+.page-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.page-nav button{padding:7px 16px;font-size:13px;border:1.5px solid var(--border);border-radius:20px;background:var(--surface);cursor:pointer;color:var(--text);font-weight:500;}
+.page-nav button:disabled{opacity:0.3;cursor:default;}
+.page-dots{display:flex;gap:5px;justify-content:center;margin-bottom:10px;}
+.a4-wrap{background:#4a5568;border-radius:8px;padding:12px;display:flex;justify-content:center;margin-bottom:10px;}
+.a4-page{background:#fff;width:100%;max-width:340px;position:relative;overflow:hidden;}
+.a4-content{position:absolute;font-family:'Malgun Gothic',sans-serif;color:#222;overflow:hidden;}
+.a4-footer-line{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;font-size:6px;color:#bbb;border-top:1px solid #eee;background:#fff;}
+.margin-overlay{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;}
+.slider-group{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
+.slider-box{background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;border:1px solid var(--border);}
+.slider-box label{font-size:11px;color:var(--text3);display:block;margin-bottom:5px;font-weight:600;}
+.slider-row{display:flex;align-items:center;gap:6px;}
+.slider-row input[type=range]{flex:1;}
+.slider-val{font-size:13px;font-weight:700;color:var(--blue);min-width:34px;text-align:right;}
+
+/* 업로드 */
+.upload-area{border:2px dashed var(--border);border-radius:var(--radius-sm);padding:24px;text-align:center;cursor:pointer;background:var(--surface2);margin:8px 0;transition:all .15s;}
+.upload-area:hover{border-color:var(--blue);background:var(--blue-light);}
+.upload-area p{font-size:13px;color:var(--text3);margin-top:8px;}
+
+/* 상태 */
+.loading{text-align:center;padding:24px;font-size:13px;color:var(--text3);}
+.status-ok{color:#1e7e34;font-size:13px;font-weight:500;}
+.status-err{color:#c5221f;font-size:13px;}
+
+/* 인쇄 */
+@media print{
+  body{background:#fff;}
+  .app{max-width:100%;padding:0;}
+  .no-print{display:none!important;}
+  .print-only{display:block!important;}
+}
+.print-only{display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- 시작 화면 - 구글 로그인 -->
+<div id="s-login" class="screen active">
+  <div class="login-wrap">
+    <div class="login-icon-wrap">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    </div>
+    <div class="app-logo">서신관리프로</div>
+    <div class="app-ver">Ver.1 — 문서 관리 전문 시스템</div>
+    <div class="card" style="text-align:center;padding:2rem 1.5rem;">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">구글 계정으로 시작하세요</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:1.5rem;line-height:1.7;">구글 드라이브에 서신·서적을 저장하고<br>어디서나 검색·관리할 수 있습니다.</div>
+      <button class="google-btn" onclick="googleLogin()" style="font-size:15px;font-weight:600;padding:14px;">
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Google 계정으로 로그인
+      </button>
+      <div id="login-status" style="font-size:12px;text-align:center;margin-top:12px;min-height:40px;line-height:1.6;color:var(--blue);"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 메인 화면 -->
+<div id="s-main" class="screen">
+  <div style="padding:1.2rem 0 0.8rem;display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div style="font-size:22px;font-weight:800;color:var(--text);">서신관리프로</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:2px;" id="today-date"></div>
+    </div>
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  </div>
+
+  <div id="user-bar" class="user-bar" style="display:none;">
+    <div class="user-dot"></div>
+    <span id="user-email" style="font-size:12px;font-weight:500;"></span>
+    <span style="margin-left:auto;font-size:11px;cursor:pointer;color:var(--blue-dark);font-weight:600;" onclick="googleLogout()">로그아웃</span>
+  </div>
+
+  <!-- 2열 카드형 버튼 -->
+  <div class="main-grid">
+    <button class="main-card-btn" onclick="go('s-list')">
+      <div class="btn-icon" style="background:#e8f0fe;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </div>
+      <div class="btn-label">편지목록</div>
+      <div class="btn-desc">서신 파일 보기</div>
+    </button>
+    <button class="main-card-btn" onclick="go('s-booklist')">
+      <div class="btn-icon" style="background:#e6f4ea;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e7e34" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      </div>
+      <div class="btn-label">서적목록</div>
+      <div class="btn-desc">서적 파일 보기</div>
+    </button>
+    <button class="main-card-btn" onclick="go('s-storage')">
+      <div class="btn-icon" style="background:#e3f2fd;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0277bd" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      </div>
+      <div class="btn-label">내 저장소</div>
+      <div class="btn-desc">검색 이력 확인</div>
+    </button>
+    <button class="main-card-btn" onclick="go('s-warehouse')">
+      <div class="btn-icon" style="background:#fef3e2;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#b35c00" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="btn-label">데이터저장소</div>
+      <div class="btn-desc">파일 업로드</div>
+    </button>
+  </div>
+
+  <!-- 전체 너비 버튼 -->
+  <button class="main-card-btn-full" onclick="goSearchScreen()">
+    <div class="btn-icon" style="background:#fce8e6;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c5221f" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </div>
+    <div class="btn-texts">
+      <div class="btn-label">검색</div>
+      <div class="btn-desc">서신·서적 통합 검색</div>
+    </div>
+  </button>
+  <button class="main-card-btn-full" onclick="go('s-today')">
+    <div class="btn-icon" style="background:#fce8f3;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9c1f6e" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    </div>
+    <div class="btn-texts">
+      <div class="btn-label">오늘 검색내용 목록</div>
+      <div class="btn-desc">저장·미리보기·출력</div>
+    </div>
+  </button>
+</div>
+
+<!-- ① 편지목록 -->
+<div id="s-list" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-main')">← 메인</button>
+    <div class="screen-title">편지목록</div>
+  </div>
+  <div class="card" id="list-year-content">
+    <div class="loading">구글 드라이브에서 불러오는 중...</div>
+  </div>
+</div>
+
+<div id="s-monthly" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-list')">← 돌아가기</button>
+    <div class="screen-title" id="monthly-title">월별 서신</div>
+  </div>
+  <div class="card" id="monthly-content"></div>
+</div>
+
+<div id="s-pdf-view" class="screen">
+  <div class="screen-header no-print">
+    <button class="back-btn" id="pdf-back-btn" onclick="go('s-monthly')">← 돌아가기</button>
+    <div class="screen-title" id="pdf-title" style="font-size:14px;"></div>
+  </div>
+  <div id="pdf-loading" style="text-align:center;padding:20px;font-size:13px;color:var(--text3);">PDF 불러오는 중...</div>
+</div>
+
+<!-- 복사 완료 토스트 -->
+<div id="copy-toast">✓ 복사됐습니다!</div>
+
+<!-- 전체화면 PDF 오버레이 -->
+<div id="pdf-fullscreen" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#2d3748;z-index:9999;flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#1a202c;flex-shrink:0;flex-wrap:wrap;">
+    <button id="pdf-fs-close-btn" style="padding:7px 16px;border:none;border-radius:20px;background:#4a5568;cursor:pointer;font-size:13px;color:#fff;font-weight:600;">✕ 닫기</button>
+    <div style="flex:1;font-size:13px;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="pdf-fs-title"></div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <button onclick="pdfGoFirst()" style="padding:6px 12px;border:1px solid #4a5568;border-radius:20px;background:#2d3748;cursor:pointer;font-size:12px;color:#ccc;font-weight:500;">⏮ 첫 페이지</button>
+      <button onclick="pdfPrevPage()" style="padding:6px 12px;border:1px solid #4a5568;border-radius:20px;background:#2d3748;cursor:pointer;font-size:13px;color:#ccc;">◀</button>
+      <span id="pdf-fs-page" style="font-size:13px;color:#ccc;white-space:nowrap;min-width:60px;text-align:center;"></span>
+      <button onclick="pdfNextPage()" style="padding:6px 12px;border:1px solid #4a5568;border-radius:20px;background:#2d3748;cursor:pointer;font-size:13px;color:#ccc;">▶</button>
+      <button onclick="pdfZoom(-0.25)" style="width:32px;height:32px;border:1px solid #4a5568;border-radius:50%;background:#2d3748;cursor:pointer;font-size:18px;color:#ccc;display:flex;align-items:center;justify-content:center;">−</button>
+      <span id="pdf-fs-zoom" style="font-size:13px;color:#ccc;font-weight:600;min-width:44px;text-align:center;"></span>
+      <button onclick="pdfZoom(0.25)" style="width:32px;height:32px;border:1px solid #4a5568;border-radius:50%;background:#2d3748;cursor:pointer;font-size:18px;color:#ccc;display:flex;align-items:center;justify-content:center;">+</button>
+      <button onclick="pdfFitScreen()" style="padding:6px 12px;border:1px solid #1a73e8;border-radius:20px;background:#1a73e8;cursor:pointer;font-size:12px;color:#fff;font-weight:600;">화면맞춤</button>
+      <button onclick="copySelectedText()" style="padding:6px 14px;border:1px solid #48bb78;border-radius:20px;background:#276749;cursor:pointer;font-size:12px;color:#fff;font-weight:600;">📋 선택 복사</button>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#718096;padding:4px 16px;background:#1a202c;border-top:1px solid #2d3748;flex-shrink:0;">
+    💡 마우스로 텍스트를 드래그해서 선택한 후 "선택 복사" 버튼을 누르세요
+  </div>
+  <div id="pdf-fs-wrap" style="flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:16px;">
+    <div id="pdf-fs-container" style="position:relative;display:inline-block;">
+      <canvas id="pdf-fs-canvas" style="display:block;border-radius:4px;"></canvas>
+      <div id="pdf-fs-text-layer" class="pdf-text-layer-active"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 내 저장소 -->
+<div id="s-storage" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-main')">← 메인</button>
+    <div class="screen-title">내 저장소</div>
+  </div>
+  <div class="info-box">검색한 내용을 날짜별로 저장한 목록입니다. (내저장소.xlsx)</div>
+  <div class="card">
+    <div class="tab-row">
+      <div class="tab on" onclick="switchTab(this,'t-today2')">오늘</div>
+      <div class="tab" onclick="switchTab(this,'t-week')">이번 주</div>
+      <div class="tab" onclick="switchTab(this,'t-month')">이번 달</div>
+    </div>
+    <div id="t-today2" id="storage-content">
+      <div class="loading">불러오는 중...</div>
+    </div>
+    <div id="t-week" style="display:none;"></div>
+    <div id="t-month" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- ② 서적목록 -->
+<div id="s-booklist" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-main')">← 메인</button>
+    <div class="screen-title">서적목록</div>
+  </div>
+  <div class="card" id="book-list-content">
+    <div class="loading">구글 드라이브에서 불러오는 중...</div>
+  </div>
+</div>
+
+<!-- ④ 데이터저장소 -->
+<div id="s-warehouse" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-main')">← 메인</button>
+    <div class="screen-title">데이터저장소</div>
+  </div>
+  <div class="card">
+    <div style="font-size:12px;color:#999;margin-bottom:6px;">서신 저장</div>
+    <button class="sub-btn" onclick="go('s-upload-m')">월별서신 입력 →</button>
+    <button class="sub-btn" onclick="go('s-upload-s')">별도서신 입력 →</button>
+    <div style="border-top:1px solid #f0f0f0;margin-top:10px;padding-top:10px;">
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">서적 저장</div>
+      <button class="sub-btn" style="color:#27500a;border-color:#c0dd97;background:#f4faec;" onclick="go('s-upload-book')">서적 파일 입력 →</button>
+    </div>
+    <div style="border-top:1px solid #f0f0f0;margin-top:10px;padding-top:10px;">
+      <div style="font-size:12px;color:#999;margin-bottom:6px;">색인 관리 — 검색이 안 될 때 사용</div>
+      <button class="sub-btn" style="color:#1a73e8;border-color:#e8f0fe;background:#f8fbff;" onclick="reindexAll()">전체 색인 재생성 →</button>
+      <div id="reindex-status" style="font-size:12px;color:#1a73e8;margin-top:4px;min-height:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 서적 파일 입력 -->
+<div id="s-upload-book" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-warehouse')">← 돌아가기</button>
+    <div class="screen-title">서적 파일 입력</div>
+  </div>
+  <div class="card">
+    <label class="field-label">서적 제목</label>
+    <input type="text" id="b-title" placeholder="예: 성경 주석 1권">
+    <label class="field-label">저자 (선택)</label>
+    <input type="text" id="b-author" placeholder="예: 홍길동">
+    <label class="field-label">PDF 파일 선택</label>
+    <div class="upload-area" onclick="document.getElementById('b-file').click()">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      <p id="b-file-name">클릭하여 PDF 선택</p>
+    </div>
+    <input type="file" id="b-file" accept=".pdf" style="display:none" onchange="onFileSelect('b-file','b-file-name')">
+    <div id="b-upload-status" style="font-size:12px;color:#1a73e8;margin-top:6px;min-height:16px;"></div>
+    <button class="primary-btn" style="background:#3b6d11;border-color:#3b6d11;" onclick="uploadBook()">구글클라우드에 저장</button>
+  </div>
+</div>
+
+<div id="s-upload-m" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-warehouse')">← 돌아가기</button>
+    <div class="screen-title">월별서신 입력</div>
+  </div>
+  <div class="card">
+    <label class="field-label">년도</label>
+    <input type="text" id="m-year" placeholder="예: 2024" maxlength="4">
+    <label class="field-label">월</label>
+    <input type="text" id="m-month" placeholder="예: 3" maxlength="2">
+    <label class="field-label">PDF 파일 선택</label>
+    <div class="upload-area" onclick="document.getElementById('m-file').click()">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      <p id="m-file-name">클릭하여 PDF 선택</p>
+    </div>
+    <input type="file" id="m-file" accept=".pdf" style="display:none" onchange="onFileSelect('m-file','m-file-name')">
+    <div id="m-upload-status" style="font-size:12px;color:#1a73e8;margin-top:6px;min-height:16px;"></div>
+    <button class="primary-btn" onclick="uploadMonthly()">구글클라우드에 저장</button>
+  </div>
+</div>
+
+<div id="s-upload-s" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-warehouse')">← 돌아가기</button>
+    <div class="screen-title">별도서신 입력</div>
+  </div>
+  <div class="card">
+    <label class="field-label">서신 이름 (직접 입력)</label>
+    <input type="text" id="s-name" placeholder="예: 긴급 납품 요청서">
+    <label class="field-label">날짜</label>
+    <input type="date" id="s-date">
+    <label class="field-label">PDF 파일 선택</label>
+    <div class="upload-area" onclick="document.getElementById('s-file').click()">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      <p id="s-file-name">클릭하여 PDF 선택</p>
+    </div>
+    <input type="file" id="s-file" accept=".pdf" style="display:none" onchange="onFileSelect('s-file','s-file-name')">
+    <div id="s-upload-status" style="font-size:12px;color:#1a73e8;margin-top:6px;min-height:16px;"></div>
+    <button class="primary-btn" onclick="uploadSeparate()">구글클라우드에 저장</button>
+  </div>
+</div>
+
+<!-- ④ 검색 -->
+<div id="s-search" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-main')">← 메인</button>
+    <div class="screen-title">검색</div>
+  </div>
+  <div class="card">
+    <div class="search-wrap">
+      <input class="search-input" id="search-input" type="text" placeholder="단어, 년/월, 숫자 입력..." oninput="onSearchInput(this.value)" onkeydown="if(event.key==='Enter')doSearch()">
+    </div>
+    <div id="autocomplete" class="ac-box" style="display:none;"></div>
+    <div class="filter-row">
+      <div class="filter-chip on" onclick="toggleChip(this)">전체</div>
+      <div class="filter-chip" onclick="toggleChip(this)">월별서신</div>
+      <div class="filter-chip" onclick="toggleChip(this)">별도서신</div>
+      <div class="filter-chip" onclick="toggleChip(this)">서적</div>
+    </div>
+    <button class="search-btn" onclick="doSearch()">검색</button>
+    <div id="search-results"></div>
+  </div>
+</div>
+
+<!-- ⑤ 오늘 검색내용 목록 -->
+<div id="s-today" class="screen">
+  <div class="screen-header">
+    <button class="back-btn" onclick="go('s-main')">← 메인</button>
+    <div class="screen-title">오늘 검색내용 목록</div>
+  </div>
+  <div class="card">
+    <div id="today-list"></div>
+    <div class="bottom-bar">
+      <button class="half-btn gray" onclick="openPreview()">미리보기</button>
+      <button class="half-btn blue" onclick="doPrint()">🖨 바로 인쇄</button>
+    </div>
+    <div class="bottom-bar" style="margin-top:4px;">
+      <button class="half-btn gray" onclick="openSaveModal()" style="font-size:13px;">체크 항목 저장</button>
+    </div>
+  </div>
+
+  <!-- 저장 모달 -->
+  <div id="save-modal" style="display:none;">
+    <div class="card" style="border:2px solid #1a73e8;">
+      <div style="font-size:14px;font-weight:600;margin-bottom:10px;">저장 형식 선택</div>
+      <div class="bottom-bar" style="margin-bottom:8px;">
+        <button class="half-btn gray" onclick="saveChecked('word')">Word 저장</button>
+        <button class="half-btn gray" onclick="saveChecked('pdf')">PDF 저장</button>
+      </div>
+      <div style="font-size:12px;color:#999;margin-bottom:8px;">저장 위치</div>
+      <div class="bottom-bar">
+        <button class="half-btn gray" onclick="saveToCloud()">구글 드라이브</button>
+        <button class="half-btn gray" onclick="saveToLocal()">내 기기 다운로드</button>
+      </div>
+      <button class="sec-btn" onclick="document.getElementById('save-modal').style.display='none'">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 미리보기 + 인쇄 -->
+<div id="s-print-preview" class="screen">
+  <div class="screen-header no-print">
+    <button class="back-btn" onclick="go('s-today')">← 돌아가기</button>
+    <div class="screen-title">인쇄 미리보기</div>
+  </div>
+  <div class="card no-print" style="padding:0.75rem 1rem;">
+    <div class="page-nav">
+      <button id="pp-prev" onclick="ppChangePage(-1)">◀ 이전</button>
+      <span id="pp-indicator" style="font-size:13px;color:#666;"></span>
+      <button id="pp-next" onclick="ppChangePage(1)">다음 ▶</button>
+    </div>
+    <div class="a4-wrap">
+      <div class="a4-page" id="a4-page">
+        <div class="a4-content" id="a4-content"></div>
+        <div class="margin-overlay" id="margin-overlay"></div>
+        <div class="a4-footer-line" id="a4-footer"></div>
+      </div>
+    </div>
+    <div class="page-dots" id="pp-dots"></div>
+  </div>
+  <div class="card no-print">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#111;">여백 조절</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="small-btn" onclick="setMarginPreset(12)">좁게 12mm</button>
+      <button class="small-btn" style="background:#e8f0fe;color:#1a73e8;" id="preset-normal" onclick="setMarginPreset(25)">보통 25mm</button>
+      <button class="small-btn" onclick="setMarginPreset(38)">넓게 38mm</button>
+    </div>
+    <div class="slider-group">
+      <div class="slider-box"><label>위쪽</label><div class="slider-row"><input type="range" min="5" max="45" value="25" step="1" id="m-top" oninput="updatePP()"><span class="slider-val" id="v-top">25mm</span></div></div>
+      <div class="slider-box"><label>아래쪽</label><div class="slider-row"><input type="range" min="5" max="45" value="25" step="1" id="m-bot" oninput="updatePP()"><span class="slider-val" id="v-bot">25mm</span></div></div>
+      <div class="slider-box"><label>왼쪽</label><div class="slider-row"><input type="range" min="5" max="45" value="25" step="1" id="m-left" oninput="updatePP()"><span class="slider-val" id="v-left">25mm</span></div></div>
+      <div class="slider-box"><label>오른쪽</label><div class="slider-row"><input type="range" min="5" max="45" value="25" step="1" id="m-right" oninput="updatePP()"><span class="slider-val" id="v-right">25mm</span></div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding-top:8px;border-top:1px solid #f0f0f0;margin-top:4px;">
+      <span style="font-size:12px;color:#999;">글꼴 크기</span>
+      <input type="range" min="7" max="14" value="10" step="1" id="pp-font" oninput="document.getElementById('v-font').textContent=this.value+'pt';updatePP()" style="flex:1;">
+      <span class="slider-val" id="v-font">10pt</span>
+    </div>
+    <div style="font-size:11px;color:#bbb;margin-top:8px;" id="pp-info"></div>
+  </div>
+  <div class="bottom-bar no-print">
+    <button class="half-btn gray" onclick="go('s-today')">← 돌아가기</button>
+    <button class="half-btn blue" onclick="doPrint()">🖨 프린터로 출력</button>
+  </div>
+</div>
+
+</div><!-- .app -->
+
+<script>
+// ── 설정 ────────────────────────────────────────────────────────
+var CLIENT_ID='456031376785-8mr2pqft98i5m8rsfts1f12dfg7na8p8.apps.googleusercontent.com';
+var SCOPES='https://www.googleapis.com/auth/drive.file';
+var CORRECT_PIN='12345678';
+var FOLDER_NAME='서신관리프로';
+var ROOT_FOLDER_ID=null;
+var MONTHLY_FOLDER_ID=null;
+var SEPARATE_FOLDER_ID=null;
+var BOOK_FOLDER_ID=null;
+var tokenClient=null;
+var accessToken=null;
+var isSignedIn=false;
+
+// ── 색인 DB (로컬) ──────────────────────────────────────────────
+var indexDB=JSON.parse(localStorage.getItem('seoshin_index')||'[]');
+var searchHistory=JSON.parse(localStorage.getItem('seoshin_history')||'[]');
+var todayItems=JSON.parse(localStorage.getItem('seoshin_today_'+today())||'[]');
+
+function today(){return new Date().toISOString().slice(0,10);}
+function saveIndex(){localStorage.setItem('seoshin_index',JSON.stringify(indexDB));}
+function saveHistory(){localStorage.setItem('seoshin_history',JSON.stringify(searchHistory));}
+function saveTodayItems(){localStorage.setItem('seoshin_today_'+today(),JSON.stringify(todayItems));}
+
+// ── 자동 로그인 (앱 시작 시) ────────────────────────────────────
+function tryAutoLogin(){
+  var savedEmail=localStorage.getItem('seoshin_email');
+  if(!savedEmail) return; // 저장된 계정 없으면 로그인 화면 유지
+
+  setLoginStatus('이전 계정으로 자동 로그인 중...', false);
+
+  if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){
+    setTimeout(tryAutoLogin, 1000);
+    return;
+  }
+  try{
+    if(!tokenClient){
+      tokenClient=google.accounts.oauth2.initTokenClient({
+        client_id:CLIENT_ID,
+        scope:SCOPES,
+        callback:function(resp){
+          if(resp.error){
+            setLoginStatus('자동 로그인 실패. 다시 로그인해주세요.', true);
+            localStorage.removeItem('seoshin_email');
+            return;
+          }
+          accessToken=resp.access_token;
+          isSignedIn=true;
+          document.getElementById('user-email').textContent=savedEmail;
+          document.getElementById('user-bar').style.display='flex';
+          ensureFolders().then(function(){
+            initApp();
+            go('s-main');
+          }).catch(function(){
+            initApp();
+            go('s-main');
+          });
+        },
+        error_callback:function(){
+          setLoginStatus('자동 로그인 실패. 다시 로그인해주세요.', true);
+          localStorage.removeItem('seoshin_email');
+        }
+      });
+    }
+    // prompt:'none' 으로 팝업 없이 조용히 토큰 재발급
+    tokenClient.requestAccessToken({prompt:'none'});
+  }catch(e){
+    setLoginStatus('자동 로그인 실패. 다시 로그인해주세요.', true);
+  }
+}
+
+// ── 구글 로그인 ─────────────────────────────────────────────────
+function setLoginStatus(msg, isErr){
+  var el=document.getElementById('login-status');
+  el.textContent=msg;
+  el.style.color=isErr?'#c5221f':'#1a73e8';
+}
+
+function googleLogin(){
+  if(location.protocol==='file:'){
+    setLoginStatus('',true);
+    document.getElementById('login-status').innerHTML='<span style="color:#c5221f;font-size:12px;">⚠ 파일을 직접 열면 구글 로그인이 차단됩니다.<br>아래 주소로 접속해 주세요:<br><b>https://cksomj.github.io/seoshin-pro</b><br>또는 터미널에서 python -m http.server 3000 실행 후<br>http://localhost:3000 으로 접속해 주세요.</span>';
+    return;
+  }
+  // GSI 라이브러리 로드 확인
+  if(typeof google==='undefined'||!google.accounts||!google.accounts.oauth2){
+    setLoginStatus('구글 라이브러리 로딩 중... 잠시 후 다시 눌러주세요.',false);
+    setTimeout(googleLogin,1500);
+    return;
+  }
+  setLoginStatus('구글 로그인 창을 여는 중...',false);
+  try{
+    if(!tokenClient){
+      tokenClient=google.accounts.oauth2.initTokenClient({
+        client_id:CLIENT_ID,
+        scope:SCOPES,
+        callback:function(resp){
+          if(resp.error){
+            var msg=resp.error==='access_denied'?'로그인을 취소했습니다.':
+                    resp.error==='popup_closed_by_user'?'팝업이 닫혔습니다. 다시 시도해주세요.':
+                    '로그인 실패: '+resp.error;
+            setLoginStatus(msg,true);
+            return;
+          }
+          accessToken=resp.access_token;
+          isSignedIn=true;
+          setLoginStatus('로그인 성공! 드라이브 연결 중...',false);
+          fetchUserInfo();
+          ensureFolders().then(function(){
+            initApp();
+            go('s-main');
+          }).catch(function(e){
+            console.error('폴더 생성 오류',e);
+            initApp();
+            go('s-main');
+          });
+        },
+        error_callback:function(err){
+          setLoginStatus('팝업 차단됨: 브라우저 팝업 허용 후 다시 시도해주세요.',true);
+        }
+      });
+    }
+    tokenClient.requestAccessToken({prompt:'consent'});
+  }catch(e){
+    setLoginStatus('오류: '+e.message,true);
+  }
+}
+
+function fetchUserInfo(){
+  fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+accessToken}})
+    .then(function(r){return r.json();})
+    .then(function(info){
+      var email=info.email||'구글 계정';
+      document.getElementById('user-email').textContent=email;
+      document.getElementById('user-bar').style.display='flex';
+      localStorage.setItem('seoshin_email', email); // 자동 로그인용 저장
+    }).catch(function(){
+      document.getElementById('user-email').textContent='구글 계정 연결됨';
+      document.getElementById('user-bar').style.display='flex';
+    });
+}
+
+function googleLogout(){
+  if(accessToken&&typeof google!=='undefined'){
+    google.accounts.oauth2.revoke(accessToken,function(){});
+  }
+  accessToken=null;isSignedIn=false;tokenClient=null;
+  ROOT_FOLDER_ID=null;MONTHLY_FOLDER_ID=null;SEPARATE_FOLDER_ID=null;BOOK_FOLDER_ID=null;
+  localStorage.removeItem('seoshin_email'); // 자동 로그인 해제
+  document.getElementById('user-bar').style.display='none';
+  go('s-login');
+}
+
+// ── 앱 초기화 ───────────────────────────────────────────────────
+function initApp(){
+  document.getElementById('today-date').textContent=new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+  renderTodayList();
+}
+
+// ── 화면 이동 ───────────────────────────────────────────────────
+function go(id){
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById(id).classList.add('active');
+  if(id==='s-list') loadYearList();
+  if(id==='s-booklist') loadBookList();
+  if(id==='s-storage') loadStorageList();
+}
+
+// 검색 화면으로 이동 (검색어 초기화)
+function goSearchScreen(){
+  go('s-search');
+  document.getElementById('search-input').value='';
+  document.getElementById('search-results').innerHTML='';
+  document.getElementById('autocomplete').style.display='none';
+}
+
+// 내 저장소에서 검색어 클릭 시 호출
+function goSearch(keyword){
+  go('s-search');
+  document.getElementById('search-input').value=keyword;
+  document.getElementById('search-results').innerHTML='';
+  document.getElementById('autocomplete').style.display='none';
+  doSearch();
+}
+
+// ── 구글 드라이브 API 헬퍼 ──────────────────────────────────────
+function driveGet(url){
+  return fetch(url,{headers:{Authorization:'Bearer '+accessToken}}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  });
+}
+function drivePost(url,body,isJson){
+  return fetch(url,{method:'POST',headers:Object.assign({'Authorization':'Bearer '+accessToken},isJson?{'Content-Type':'application/json'}:{}),body:isJson?JSON.stringify(body):body}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  });
+}
+
+// ── 폴더 구조 보장 (Promise 반환) ───────────────────────────────
+function ensureFolders(){
+  return findOrCreateFolder(FOLDER_NAME,null).then(function(id){
+    ROOT_FOLDER_ID=id;
+    return Promise.all([
+      findOrCreateFolder('월별서신',id),
+      findOrCreateFolder('별도서신',id),
+      findOrCreateFolder('서적',id)
+    ]);
+  }).then(function(ids){
+    MONTHLY_FOLDER_ID=ids[0];
+    SEPARATE_FOLDER_ID=ids[1];
+    BOOK_FOLDER_ID=ids[2];
+    console.log('폴더 준비 완료',{ROOT_FOLDER_ID,MONTHLY_FOLDER_ID,SEPARATE_FOLDER_ID,BOOK_FOLDER_ID});
+  });
+}
+function findOrCreateFolder(name,parentId){
+  var q="name='"+name+"' and mimeType='application/vnd.google-apps.folder' and trashed=false"+(parentId?" and '"+parentId+"' in parents":"");
+  return driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)')
+    .then(function(r){
+      if(r.files&&r.files.length>0) return r.files[0].id;
+      var meta={name:name,mimeType:'application/vnd.google-apps.folder'};
+      if(parentId) meta.parents=[parentId];
+      return drivePost('https://www.googleapis.com/drive/v3/files',meta,true).then(function(f){return f.id;});
+    });
+}
+
+// ── ② 서적목록 ──────────────────────────────────────────────────
+function loadBookList(){
+  var el=document.getElementById('book-list-content');
+  if(!isSignedIn){el.innerHTML='<div class="info-box">구글 로그인 후 사용 가능합니다.</div>';return;}
+  if(!BOOK_FOLDER_ID){el.innerHTML='<div class="info-box">드라이브 연결 준비 중입니다. 잠시 후 다시 시도해주세요.</div>';return;}
+  el.innerHTML='<div class="loading">서적 목록 불러오는 중...</div>';
+  var q="'"+BOOK_FOLDER_ID+"' in parents and mimeType='application/pdf' and trashed=false";
+  driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&orderBy=name&fields=files(id,name)')
+    .then(function(r){
+      if(!r.files||!r.files.length){
+        el.innerHTML='<div class="info-box">저장된 서적이 없습니다.<br>데이터저장소 → 서적 파일 입력에서 추가하세요.</div>';
+        return;
+      }
+      el.innerHTML=r.files.map(function(f){
+        var entry=indexDB.find(function(d){return d.id===f.id;});
+        var author=entry&&entry.author?'<span style="font-size:11px;color:#999;margin-left:6px;">'+entry.author+'</span>':'';
+        return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-booklist\')" style="display:flex;align-items:center;">'+
+          '<span>'+f.name+'</span>'+author+'</button>';
+      }).join('');
+    }).catch(function(e){el.innerHTML='<div class="info-box">불러오기 실패: '+e.message+'</div>';});
+}
+
+// ── 서적 업로드 ─────────────────────────────────────────────────
+function uploadBook(){
+  var title=document.getElementById('b-title').value.trim();
+  var author=document.getElementById('b-author').value.trim();
+  var file=document.getElementById('b-file').files[0];
+  if(!title){alert('서적 제목을 입력하세요.');return;}
+  if(!file){alert('PDF 파일을 선택하세요.');return;}
+  if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
+  var fileName=title+(author?'_'+author:'')+'.pdf';
+  var status=document.getElementById('b-upload-status');
+  status.textContent='업로드 중...';
+  var meta={name:fileName,parents:[BOOK_FOLDER_ID]};
+  var form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',file);
+  fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',{
+    method:'POST',headers:{Authorization:'Bearer '+accessToken},body:form
+  }).then(function(r){return r.json();}).then(function(f){
+    status.textContent='저장 완료! 본문 색인 생성 중...';
+    var reader=new FileReader();
+    reader.onload=function(e){
+      parsePdfWithLinks(e.target.result).then(function(result){
+        var entry={id:f.id,name:fileName,type:'book',date:today(),body:result.text||'',author:author,title:title};
+        var existing=indexDB.findIndex(function(r){return r.id===f.id;});
+        if(existing>=0) indexDB[existing]=entry; else indexDB.push(entry);
+        saveIndex();
+        status.textContent='저장 및 색인 완료: '+fileName;
+      }).catch(function(){status.textContent='저장 완료 (색인 실패)';});
+    };
+    reader.readAsArrayBuffer(file);
+  }).catch(function(e){status.textContent='저장 실패: '+e.message;});
+}
+function loadYearList(){
+  var el=document.getElementById('list-year-content');
+  if(!isSignedIn){el.innerHTML='<div class="info-box">구글 로그인 후 사용 가능합니다.</div>';return;}
+  el.innerHTML='<div class="loading">드라이브에서 불러오는 중...</div>';
+  var q="'"+MONTHLY_FOLDER_ID+"' in parents and mimeType='application/pdf' and trashed=false";
+  driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&orderBy=name desc&fields=files(id,name)')
+    .then(function(r){
+      var monthlyBtns=(r.files&&r.files.length)
+        ? r.files.map(function(f){
+            return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';
+          }).join('')
+        : '<div class="info-box" style="margin-bottom:8px;">월별서신이 없습니다.</div>';
+
+      var q2="'"+SEPARATE_FOLDER_ID+"' in parents and mimeType='application/pdf' and trashed=false";
+      return driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q2)+'&orderBy=name desc&fields=files(id,name)')
+        .then(function(r2){
+          var separateBtns=(r2.files&&r2.files.length)
+            ? r2.files.map(function(f){
+                return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';
+              }).join('')
+            : '<div class="info-box">별도서신이 없습니다.</div>';
+          el.innerHTML=
+            '<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px;">월별서신</div>'+monthlyBtns+
+            '<div style="font-size:12px;font-weight:600;color:#555;margin:12px 0 6px;border-top:1px solid #f0f0f0;padding-top:12px;">별도서신</div>'+separateBtns;
+        });
+    }).catch(function(e){el.innerHTML='<div class="info-box">불러오기 실패: '+e.message+'</div>';});
+}
+function loadMonthList(folderId,year){
+  document.getElementById('monthly-title').textContent=year+'년 월별 서신';
+  var el=document.getElementById('monthly-content');
+  go('s-monthly');
+  if(!isSignedIn||!folderId){
+    el.innerHTML='<div class="info-box">구글 로그인 후 실제 파일이 표시됩니다.</div>';
+    return;
+  }
+  el.innerHTML='<div class="loading">불러오는 중...</div>';
+  var q="'"+folderId+"' in parents and trashed=false";
+  driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&orderBy=name&fields=files(id,name,mimeType)')
+    .then(function(r){
+      if(!r.files||!r.files.length){el.innerHTML='<div class="info-box">파일이 없습니다.</div>';return;}
+      el.innerHTML=r.files.map(function(f){
+        return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';
+      }).join('');
+    });
+}
+function loadSeparateList(){
+  document.getElementById('monthly-title').textContent='별도 서신 목록';
+  go('s-monthly');
+  var el=document.getElementById('monthly-content');
+  if(!isSignedIn||!SEPARATE_FOLDER_ID){
+    el.innerHTML='<div class="info-box">구글 로그인 후 실제 파일이 표시됩니다.</div>';return;
+  }
+  el.innerHTML='<div class="loading">불러오는 중...</div>';
+  var q="'"+SEPARATE_FOLDER_ID+"' in parents and trashed=false";
+  driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&orderBy=name desc&fields=files(id,name)')
+    .then(function(r){
+      el.innerHTML=(r.files&&r.files.length)
+        ? r.files.map(function(f){
+            return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';
+          }).join('')
+        : '<div class="info-box">저장된 별도 서신이 없습니다.</div>';
+    });
+}
+// 어디서 PDF를 열었는지 기억 (돌아가기용)
+var pdfFromScreen='s-list';
+var pdfDoc=null;
+var pdfCurrentPage=1;
+var pdfTotalPages=0;
+var pdfRendering=false;
+var pdfScale=1.0;
+var pdfIsFullscreen=false;
+var pdfSearchKeyword='';
+
+function showPdfContent(fileId,title,fromScreen,searchKeyword){
+  pdfFromScreen=fromScreen||'s-list';
+  document.getElementById('pdf-title').textContent=title;
+  document.getElementById('pdf-fs-title').textContent=title;
+  document.getElementById('pdf-back-btn').onclick=function(){pdfCloseFullscreen();go(pdfFromScreen);};
+  document.getElementById('pdf-fs-close-btn').onclick=function(){pdfCloseFullscreen();go(pdfFromScreen);};
+  document.getElementById('pdf-loading').style.display='block';
+  document.getElementById('pdf-loading').textContent='PDF 불러오는 중...';
+  pdfScale=1.0; pdfIsFullscreen=true;
+  pdfSearchKeyword=searchKeyword||'';
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s-pdf-view').classList.add('active');
+  document.getElementById('pdf-fullscreen').style.display='flex';
+
+  if(!fileId||!isSignedIn){document.getElementById('pdf-loading').textContent='구글 로그인 후 실제 내용이 표시됩니다.';return;}
+  fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+accessToken}})
+  .then(function(r){return r.arrayBuffer();})
+  .then(function(buf){return pdfjsLib.getDocument({data:buf}).promise;})
+  .then(function(doc){
+    pdfDoc=doc;pdfTotalPages=doc.numPages;pdfCurrentPage=1;
+    document.getElementById('pdf-loading').style.display='none';
+    if(searchKeyword){
+      document.getElementById('pdf-loading').style.display='block';
+      document.getElementById('pdf-loading').textContent='"'+searchKeyword+'" 가 있는 페이지 찾는 중...';
+      findPageWithKeyword(searchKeyword).then(function(pageNum){
+        pdfCurrentPage=pageNum;
+        document.getElementById('pdf-loading').style.display='none';
+        setTimeout(pdfFitScreen,60);
+      });
+    } else {
+      setTimeout(pdfFitScreen,60);
+    }
+  }).catch(function(e){document.getElementById('pdf-loading').textContent='오류: '+e.message;});
+}
+
+// 검색어 하이라이트 - 캔버스에 노란색 박스 그리기
+function highlightKeyword(page, viewport, canvas, keyword){
+  if(!keyword) return;
+  var re=new RegExp(escRe(keyword),'gi');
+  page.getTextContent({normalizeWhitespace:true}).then(function(content){
+    var ctx=canvas.getContext('2d');
+    ctx.save();
+    ctx.fillStyle='rgba(255, 220, 0, 0.38)';
+    ctx.strokeStyle='rgba(200, 160, 0, 0.6)';
+    ctx.lineWidth=1;
+
+    var transform=viewport.transform;
+    var items=content.items;
+
+    // 연속된 아이템들을 합쳐서 검색어 위치 찾기
+    var fullText='';
+    var itemMap=[]; // 각 글자가 어느 item인지 기록
+    items.forEach(function(item){
+      for(var c=0;c<item.str.length;c++){
+        itemMap.push({item:item,charIdx:c});
+      }
+      fullText+=item.str;
+    });
+
+    var match;
+    while((match=re.exec(fullText))!==null){
+      var startIdx=match.index;
+      var endIdx=startIdx+match[0].length-1;
+      if(startIdx>=itemMap.length||endIdx>=itemMap.length) continue;
+
+      // 매칭된 범위에 있는 아이템들 수집
+      var matchedItems={};
+      for(var i=startIdx;i<=endIdx;i++){
+        if(i<itemMap.length){
+          var key=items.indexOf(itemMap[i].item);
+          matchedItems[key]=itemMap[i].item;
+        }
+      }
+
+      // 각 아이템에 하이라이트 박스 그리기
+      Object.keys(matchedItems).forEach(function(key){
+        var item=matchedItems[key];
+        if(!item.transform) return;
+        var tx=item.transform;
+        // PDF 좌표 → 캔버스 좌표 변환
+        var x=tx[4]*transform[0]+transform[4];
+        var y=tx[5]*transform[3]+transform[5];
+        var w=item.width*Math.abs(transform[0]);
+        var h=item.height*Math.abs(transform[3]);
+        // Y축 조정 (텍스트 베이스라인 기준)
+        ctx.fillRect(x, y-h, w, h+2);
+        ctx.strokeRect(x, y-h, w, h+2);
+      });
+    }
+    ctx.restore();
+  }).catch(function(){});
+}
+
+// 검색어가 있는 페이지 순차 탐색 (발견 즉시 반환)
+function findPageWithKeyword(keyword){
+  if(!pdfDoc||pdfTotalPages===0) return Promise.resolve(1);
+  var re=new RegExp(escRe(keyword),'i');
+  var result=Promise.resolve(0); // 0=아직 못 찾음
+  for(var i=1;i<=pdfTotalPages;i++){
+    (function(pageNum){
+      result=result.then(function(found){
+        if(found>0) return found; // 이미 찾았으면 패스
+        return pdfDoc.getPage(pageNum).then(function(page){
+          return page.getTextContent({normalizeWhitespace:true}).then(function(content){
+            // 공백 없이 전체 텍스트 합치기
+            var text=content.items.map(function(item){return item.str;}).join('');
+            // 공백 포함 버전도 시도
+            var textSpaced=content.items.map(function(item){return item.str;}).join(' ');
+            if(re.test(text)||re.test(textSpaced)){
+              console.log('검색어 "'+keyword+'" 발견: '+pageNum+'페이지');
+              return pageNum;
+            }
+            return 0;
+          });
+        }).catch(function(){return 0;});
+      });
+    })(i);
+  }
+  return result.then(function(found){
+    console.log('최종 결과 페이지:', found||1);
+    return found>0?found:1;
+  });
+}
+
+function renderPdfPage(pageNum){
+  if(!pdfDoc||pdfRendering) return;
+  pdfRendering=true;
+  pdfDoc.getPage(pageNum).then(function(page){
+    var isFS=pdfIsFullscreen;
+    var canvas=isFS?document.getElementById('pdf-fs-canvas'):document.getElementById('pdf-canvas');
+    var textLayer=isFS?document.getElementById('pdf-fs-text-layer'):document.getElementById('pdf-text-layer');
+    var container=isFS?document.getElementById('pdf-fs-container'):document.getElementById('pdf-page-container');
+    var viewport=page.getViewport({scale:pdfScale});
+    canvas.width=viewport.width;canvas.height=viewport.height;
+    container.style.width=viewport.width+'px';container.style.height=viewport.height+'px';
+    textLayer.innerHTML='';
+    textLayer.style.width=viewport.width+'px';textLayer.style.height=viewport.height+'px';
+    page.render({canvasContext:canvas.getContext('2d'),viewport:viewport}).promise.then(function(){
+      pdfRendering=false;
+      var info=pageNum+' / '+pdfTotalPages;
+      var zoom=Math.round(pdfScale*100)+'%';
+      var elPageInfo=document.getElementById('pdf-page-info');
+      var elZoomInfo=document.getElementById('pdf-zoom-info');
+      var elPrev=document.getElementById('pdf-prev');
+      var elNext=document.getElementById('pdf-next');
+      if(elPageInfo) elPageInfo.textContent=info;
+      if(elZoomInfo) elZoomInfo.textContent=zoom;
+      if(elPrev) elPrev.disabled=pageNum<=1;
+      if(elNext) elNext.disabled=pageNum>=pdfTotalPages;
+      var elFsPage=document.getElementById('pdf-fs-page');
+      var elFsZoom=document.getElementById('pdf-fs-zoom');
+      if(elFsPage) elFsPage.textContent=info;
+      if(elFsZoom) elFsZoom.textContent=zoom;
+      // 검색어 하이라이트
+      if(pdfSearchKeyword) highlightKeyword(page,viewport,canvas,pdfSearchKeyword);
+    });
+
+    // 텍스트 선택 레이어 렌더링 (복사용)
+    page.getTextContent({normalizeWhitespace:true}).then(function(textContent){
+      textLayer.innerHTML='';
+      textContent.items.forEach(function(item){
+        if(!item.str.trim()) return;
+        var tx=item.transform;
+        var span=document.createElement('span');
+        // PDF 좌표 → 화면 좌표
+        var x=tx[4]*viewport.transform[0]+viewport.transform[4];
+        var y=tx[5]*viewport.transform[3]+viewport.transform[5];
+        var fontSize=Math.abs(tx[3])*Math.abs(viewport.transform[3]);
+        span.textContent=item.str;
+        span.style.cssText='left:'+x+'px;top:'+(y-fontSize)+'px;font-size:'+fontSize+'px;font-family:sans-serif;';
+        textLayer.appendChild(span);
+      });
+    });
+    // 링크 어노테이션 처리 - transform 행렬로 정확한 좌표 계산
+    page.getAnnotations().then(function(anns){
+      anns.forEach(function(ann){
+        if(ann.subtype!=='Link') return;
+        // PDF 좌표 → 화면 좌표 변환 (viewport transform 사용)
+        var transform=viewport.transform; // [scaleX, 0, 0, scaleY, offsetX, offsetY]
+        var x1=ann.rect[0]*transform[0]+transform[4];
+        var y1=ann.rect[1]*transform[3]+transform[5];
+        var x2=ann.rect[2]*transform[0]+transform[4];
+        var y2=ann.rect[3]*transform[3]+transform[5];
+        var left=Math.min(x1,x2);
+        var top=Math.min(y1,y2);
+        var width=Math.abs(x2-x1);
+        var height=Math.abs(y2-y1);
+
+        var a=document.createElement('a');
+        a.style.cssText='position:absolute;left:'+left+'px;top:'+top+'px;width:'+width+'px;height:'+height+'px;cursor:pointer;z-index:10;display:block;';
+
+        if(ann.url){
+          a.href=ann.url;
+          a.target='_blank';
+          a.rel='noopener';
+        } else if(ann.dest){
+          a.href='#';
+          (function(dest){
+            a.onclick=function(e){
+              e.preventDefault();
+              var destArr=typeof dest==='string'
+                ?pdfDoc.getDestination(dest)
+                :Promise.resolve(dest);
+              destArr.then(function(d){
+                if(!d) return;
+                return pdfDoc.getPageIndex(d[0]);
+              }).then(function(idx){
+                if(idx!=null){pdfCurrentPage=idx+1;renderPdfPage(pdfCurrentPage);}
+              });
+            };
+          })(ann.dest);
+        } else {
+          return;
+        }
+        textLayer.appendChild(a);
+      });
+    });
+  });
+}
+
+function pdfFitWidth(){
+  if(!pdfDoc) return;
+  pdfIsFullscreen=false;
+  pdfDoc.getPage(pdfCurrentPage).then(function(page){
+    var wrap=document.getElementById('pdf-viewer-wrap');
+    var availW=wrap.offsetWidth-24;
+    var vp=page.getViewport({scale:1});
+    pdfScale=Math.max(0.5,availW/vp.width);
+    renderPdfPage(pdfCurrentPage);
+  });
+}
+function pdfFitScreen(){
+  if(!pdfDoc) return;
+  pdfIsFullscreen=true;
+  pdfDoc.getPage(pdfCurrentPage).then(function(page){
+    var wrap=document.getElementById('pdf-fs-wrap');
+    var vp=page.getViewport({scale:1});
+    pdfScale=Math.min((wrap.offsetWidth-32)/vp.width,(wrap.offsetHeight-32)/vp.height);
+    renderPdfPage(pdfCurrentPage);
+  });
+}
+function pdfZoom(delta){
+  var s=Math.round((pdfScale+delta)*100)/100;
+  if(s<0.25||s>4) return;
+  pdfScale=s;renderPdfPage(pdfCurrentPage);
+}
+function copySelectedText(){
+  var selected=window.getSelection();
+  if(!selected||!selected.toString().trim()){
+    showCopyToast('먼저 텍스트를 드래그해서 선택해주세요.');
+    return;
+  }
+  var text=selected.toString();
+  navigator.clipboard.writeText(text).then(function(){
+    showCopyToast('✓ '+text.length+'자 복사됐습니다!');
+    selected.removeAllRanges();
+  }).catch(function(){
+    // 구형 브라우저 대응
+    var el=document.createElement('textarea');
+    el.value=text;
+    el.style.cssText='position:fixed;opacity:0;top:0;left:0;';
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+    showCopyToast('✓ '+text.length+'자 복사됐습니다!');
+    selected.removeAllRanges();
+  });
+}
+
+function showCopyToast(msg){
+  var toast=document.getElementById('copy-toast');
+  toast.textContent=msg;
+  toast.style.opacity='1';
+  setTimeout(function(){toast.style.opacity='0';},2500);
+}
+
+function pdfGoFirst(){pdfCurrentPage=1;renderPdfPage(pdfCurrentPage);}
+function pdfPrevPage(){if(pdfCurrentPage<=1||pdfRendering)return;pdfCurrentPage--;renderPdfPage(pdfCurrentPage);}
+function pdfNextPage(){if(pdfCurrentPage>=pdfTotalPages||pdfRendering)return;pdfCurrentPage++;renderPdfPage(pdfCurrentPage);}
+function pdfFullscreen(){
+  document.getElementById('pdf-fullscreen').style.display='flex';
+  pdfIsFullscreen=true;
+  setTimeout(pdfFitScreen,60);
+}
+function pdfCloseFullscreen(){
+  document.getElementById('pdf-fullscreen').style.display='none';
+  pdfIsFullscreen=false;
+}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')pdfCloseFullscreen();});
+
+// PDF 텍스트 가독성 정리 (링크 포함)
+function formatPdfText(raw, links){
+  var text=raw;
+  text=text.replace(/\s+(\d+)\.\s+/g,'\n\n$1. ');
+  text=text.replace(/\s+([가-힣])\.\s+/g,'\n\n$1. ');
+  text=text.replace(/\s+([①②③④⑤⑥⑦⑧⑨⑩])/g,'\n\n$1 ');
+  text=text.replace(/\.\s+([A-Z가-힣])/g,'.\n$1');
+  text=text.replace(/[ \t]{2,}/g,' ');
+  text=text.replace(/\n{3,}/g,'\n\n');
+  text=text.replace(/--- 다음 페이지 ---/g,'─────────────────');
+
+  var paras=text.split(/\n\n+/);
+  var html=paras.map(function(p){
+    p=p.trim();
+    if(!p) return '';
+
+    // URL을 먼저 플레이스홀더로 치환 (이스케이프 전에)
+    var urlMap=[];
+    var withPlaceholders=p.replace(/(https?:\/\/[^\s]+)/g,function(url){
+      var idx=urlMap.length;
+      urlMap.push(url);
+      return '\x00URL'+idx+'\x00';
+    });
+
+    // 이스케이프 처리
+    var escaped=esc(withPlaceholders).replace(/\n/g,'<br>');
+
+    // 플레이스홀더를 실제 링크로 복원
+    urlMap.forEach(function(url,idx){
+      escaped=escaped.replace('\x00URL'+idx+'\x00',
+        '<a href="'+url+'" target="_blank" rel="noopener" style="color:#1a73e8;text-decoration:underline;word-break:break-all;font-weight:500;">'+url+'</a>');
+    });
+
+    if(/^\d+\./.test(p)){
+      return '<p style="margin:12px 0 6px;font-weight:600;font-size:14px;color:#111;">'+escaped+'</p>';
+    }
+    if(/^─+$/.test(p)){
+      return '<div style="border-top:1px dashed #ddd;margin:16px 0;text-align:center;font-size:11px;color:#bbb;">다음 페이지</div>';
+    }
+    return '<p style="margin:0 0 10px;font-size:13px;line-height:1.9;color:#333;">'+escaped+'</p>';
+  }).join('');
+
+  // PDF 어노테이션에서 추출한 실제 링크 목록 하단 표시
+  if(links&&links.length){
+    html+='<div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;">';
+    html+='<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px;">문서 내 링크</div>';
+    links.forEach(function(url){
+      html+='<div style="margin-bottom:6px;"><a href="'+url+'" target="_blank" rel="noopener" style="color:#1a73e8;font-size:13px;word-break:break-all;text-decoration:underline;">'+url+'</a></div>';
+    });
+    html+='</div>';
+  }
+
+  return '<div style="padding:4px 0;">'+html+'</div>';
+}
+
+function esc(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// PDF.js 로 텍스트 + 링크 동시 추출
+function parsePdfWithLinks(arrayBuffer){
+  return new Promise(function(resolve,reject){
+    if(typeof pdfjsLib==='undefined'){
+      reject(new Error('PDF.js 라이브러리가 로드되지 않았습니다.'));
+      return;
+    }
+    var loadingTask=pdfjsLib.getDocument({data:arrayBuffer});
+    loadingTask.promise.then(function(pdf){
+      var totalPages=pdf.numPages;
+      var pagePromises=[];
+      for(var i=1;i<=totalPages;i++){
+        pagePromises.push(pdf.getPage(i).then(function(page){
+          var textPromise=page.getTextContent({normalizeWhitespace:true}).then(function(content){
+            var lines=[];var lastY=null;var lineText='';
+            content.items.forEach(function(item){
+              var y=Math.round(item.transform[5]);
+              if(lastY===null) lastY=y;
+              if(Math.abs(y-lastY)>3){
+                if(lineText.trim()) lines.push(lineText.trim());
+                lineText=item.str;lastY=y;
+              } else {
+                lineText+=(item.str.startsWith(' ')||lineText.endsWith(' ')?'':' ')+item.str;
+              }
+            });
+            if(lineText.trim()) lines.push(lineText.trim());
+            return lines.join('\n');
+          });
+          // 링크 어노테이션 추출
+          var linkPromise=page.getAnnotations().then(function(annotations){
+            return annotations
+              .filter(function(a){return a.subtype==='Link'&&a.url;})
+              .map(function(a){return a.url;});
+          }).catch(function(){return [];});
+          return Promise.all([textPromise,linkPromise]).then(function(r){
+            return {text:r[0],links:r[1]};
+          });
+        }));
+      }
+      Promise.all(pagePromises).then(function(pages){
+        var allText=pages.map(function(p){return p.text;}).join('\n\n--- 다음 페이지 ---\n\n');
+        var allLinks=[].concat.apply([],pages.map(function(p){return p.links;}));
+        // 중복 링크 제거
+        allLinks=allLinks.filter(function(v,i,a){return a.indexOf(v)===i;});
+        resolve({text:allText,links:allLinks});
+      }).catch(reject);
+    }).catch(reject);
+  });
+}
+// ── ③ 서신 저장소 업로드 ────────────────────────────────────────
+function onFileSelect(inputId,nameId){
+  var f=document.getElementById(inputId).files[0];
+  if(f) document.getElementById(nameId).textContent=f.name;
+}
+
+function uploadFile(file,folderId,fileName,statusId){
+  var status=document.getElementById(statusId);
+  status.textContent='업로드 중...';
+  var meta={name:fileName,parents:[folderId]};
+  var form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',file);
+  return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',{
+    method:'POST',headers:{Authorization:'Bearer '+accessToken},body:form
+  }).then(function(r){return r.json();}).then(function(f){
+    status.textContent='저장 완료! 본문 색인 생성 중...';
+    // PDF 본문 추출해서 색인 저장
+    var reader=new FileReader();
+    reader.onload=function(e){
+      parsePdfWithLinks(e.target.result).then(function(result){
+        addToIndex(f.id,fileName,folderId===MONTHLY_FOLDER_ID?'monthly':'separate',result.text);
+        status.textContent='저장 및 색인 완료: '+f.name;
+      }).catch(function(){
+        addToIndex(f.id,fileName,folderId===MONTHLY_FOLDER_ID?'monthly':'separate','');
+        status.textContent='저장 완료 (색인 실패): '+f.name;
+      });
+    };
+    reader.readAsArrayBuffer(file);
+    return f;
+  }).catch(function(e){status.textContent='저장 실패: '+e.message;});
+}
+
+function uploadMonthly(){
+  var year=document.getElementById('m-year').value.trim();
+  var month=document.getElementById('m-month').value.trim();
+  var file=document.getElementById('m-file').files[0];
+  if(!year||!month){alert('년도와 월을 입력하세요.');return;}
+  if(!file){alert('PDF 파일을 선택하세요.');return;}
+  if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
+  var fileName=year+'년_'+month+'월_'+file.name;
+  uploadFile(file,MONTHLY_FOLDER_ID,fileName,'m-upload-status');
+}
+
+function uploadSeparate(){
+  var name=document.getElementById('s-name').value.trim();
+  var date=document.getElementById('s-date').value;
+  var file=document.getElementById('s-file').files[0];
+  if(!name){alert('서신 이름을 입력하세요.');return;}
+  if(!file){alert('PDF 파일을 선택하세요.');return;}
+  if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
+  var fileName=(date?date+'_':'')+name+'_'+file.name;
+  uploadFile(file,SEPARATE_FOLDER_ID,fileName,'s-upload-status');
+}
+
+function addToIndex(fileId,name,type,bodyText){
+  // 기존 항목 있으면 업데이트, 없으면 추가
+  var existing=indexDB.findIndex(function(r){return r.id===fileId;});
+  var entry={id:fileId,name:name,type:type,date:today(),body:bodyText||''};
+  if(existing>=0) indexDB[existing]=entry;
+  else indexDB.push(entry);
+  saveIndex();
+}
+
+// ── ④ 검색 ─────────────────────────────────────────────────────
+function onSearchInput(v){
+  var ac=document.getElementById('autocomplete');
+  if(!v){ac.style.display='none';return;}
+  var matches=searchHistory.filter(function(h){return h.includes(v)&&h!==v;}).slice(0,5);
+  if(!matches.length){ac.style.display='none';return;}
+  ac.innerHTML=matches.map(function(m){
+    var hi=m.replace(new RegExp('('+escRe(v)+')','g'),'<span class="ac-kw">$1</span>');
+    return '<div class="ac-item" onclick="selectAC(\''+m.replace(/'/g,"\\'")+'\')">' +hi+'</div>';
+  }).join('');
+  ac.style.display='block';
+}
+function escRe(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+function selectAC(v){document.getElementById('search-input').value=v;document.getElementById('autocomplete').style.display='none';doSearch();}
+function toggleChip(el){document.querySelectorAll('.filter-chip').forEach(function(c){c.classList.remove('on');});el.classList.add('on');}
+
+function doSearch(){
+  var v=document.getElementById('search-input').value.trim();
+  if(!v) return;
+  if(!searchHistory.includes(v)){searchHistory.unshift(v);if(searchHistory.length>30)searchHistory.pop();saveHistory();}
+  document.getElementById('autocomplete').style.display='none';
+
+  var filter=document.querySelector('.filter-chip.on').textContent;
+  var re=new RegExp(escRe(v),'gi');
+
+  var results=indexDB.filter(function(r){
+    var matchType=filter==='전체'
+      ||(filter==='월별서신'&&r.type==='monthly')
+      ||(filter==='별도서신'&&r.type==='separate')
+      ||(filter==='서적'&&r.type==='book');
+    if(!matchType) return false;
+    return r.name.match(re)||(r.body&&r.body.match(re))||(r.author&&r.author.match(re))||(r.title&&r.title.match(re));
+  });
+
+  var todayEntry={keyword:v,time:new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),count:results.length,results:results};
+  todayItems.push(todayEntry);saveTodayItems();renderTodayList();
+
+  var html='<div style="font-size:12px;color:#999;margin-bottom:8px;">'+results.length+'건 검색됨</div>';
+  if(!results.length){
+    html+='<div class="info-box">검색 결과가 없습니다.<br>';
+    html+=indexDB.length===0?'서신을 먼저 저장소에 업로드해 주세요.':'저장된 서신 '+indexDB.length+'건 중 일치하는 내용이 없습니다.';
+    html+='</div>';
+  }
+  results.forEach(function(r){
+    var titleHl=r.name.replace(re,function(m){return '<mark>'+m+'</mark>';});
+    var snippet='';
+    if(r.body){
+      var idx=r.body.search(re);
+      if(idx>=0){
+        var start=Math.max(0,idx-50);
+        var end=Math.min(r.body.length,idx+100);
+        var raw=(start>0?'...':'')+r.body.slice(start,end)+(end<r.body.length?'...':'');
+        snippet=raw.replace(re,function(m){return '<mark>'+m+'</mark>';});
+      }
+    }
+    var typeLabel=r.type==='monthly'?'월별서신':r.type==='separate'?'별도서신':'📖 서적';
+    var typeBg=r.type==='book'?'background:#eaf3de;color:#27500a;':'';
+    var authorStr=r.author?(' · '+r.author):'';
+    var currentKeyword=document.getElementById('search-input').value.trim();
+    html+='<div class="result-item">'
+      +'<div class="result-title">'+titleHl+'</div>'
+      +'<div class="result-meta"><span style="'+typeBg+'padding:1px 6px;border-radius:10px;font-size:11px;">'+typeLabel+'</span> · '+r.date+authorStr+'</div>'
+      +(snippet?'<div class="result-snippet" style="margin-top:5px;">'+snippet+'</div>':'')
+      +'<div class="result-actions">'
+      +'<button class="small-btn" onclick="showPdfContent(\''+r.id+'\',\''+r.name.replace(/'/g,"\\'")+'\',\'s-search\',\''+currentKeyword.replace(/'/g,"\\'")+'\''+')">'
+      +'내용보기</button>'
+      +'</div></div>';
+  });
+  document.getElementById('search-results').innerHTML=html;
+}
+
+// ── 색인 전체 재생성 ────────────────────────────────────────────
+function reindexAll(){
+  if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
+  var status=document.getElementById('reindex-status');
+  status.textContent='드라이브에서 파일 목록 가져오는 중...';
+
+  var folders=[
+    {id:MONTHLY_FOLDER_ID,type:'monthly'},
+    {id:SEPARATE_FOLDER_ID,type:'separate'},
+    {id:BOOK_FOLDER_ID,type:'book'}
+  ];
+
+  Promise.all(folders.map(function(folder){
+    if(!folder.id) return Promise.resolve([]);
+    var q="'"+folder.id+"' in parents and mimeType='application/pdf' and trashed=false";
+    return driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)')
+      .then(function(r){
+        return (r.files||[]).map(function(f){return {id:f.id,name:f.name,type:folder.type};});
+      });
+  })).then(function(results){
+    var allFiles=results.reduce(function(a,b){return a.concat(b);},[]);
+    if(!allFiles.length){status.textContent='드라이브에 PDF 파일이 없습니다.';return;}
+    status.textContent='총 '+allFiles.length+'개 파일 색인 중... (0/'+allFiles.length+')';
+
+    var done=0;
+    return allFiles.reduce(function(chain,file){
+      return chain.then(function(){
+        return fetch('https://www.googleapis.com/drive/v3/files/'+file.id+'?alt=media',{
+          headers:{Authorization:'Bearer '+accessToken}
+        }).then(function(r){return r.arrayBuffer();})
+          .then(function(buf){return parsePdfWithLinks(buf);})
+          .then(function(result){
+            addToIndex(file.id,file.name,file.type,result.text);
+            done++;
+            status.textContent='색인 중... ('+done+'/'+allFiles.length+'): '+file.name;
+          }).catch(function(){
+            addToIndex(file.id,file.name,file.type,'');
+            done++;
+          });
+      });
+    },Promise.resolve()).then(function(){
+      status.textContent='완료! 총 '+allFiles.length+'개 서신 색인이 생성됐습니다.';
+    });
+  }).catch(function(e){
+    status.textContent='오류: '+e.message;
+  });
+}
+function loadStorageList(){
+  var keys=Object.keys(localStorage).filter(function(k){return k.startsWith('seoshin_today_');}).sort().reverse();
+  var todayKey='seoshin_today_'+today();
+  renderHistoryTab('t-today2',todayKey);
+  var weekKeys=keys.filter(function(k){var d=k.replace('seoshin_today_','');return diffDays(d)<=7;});
+  renderHistoryTab('t-week',weekKeys);
+  renderHistoryTab('t-month',keys);
+}
+function diffDays(dateStr){return Math.floor((new Date()-new Date(dateStr))/(86400000));}
+function renderHistoryTab(elId,keys){
+  var el=document.getElementById(elId);
+  var allItems=[];
+  var keyArr=Array.isArray(keys)?keys:[keys];
+  keyArr.forEach(function(k){
+    var data=JSON.parse(localStorage.getItem(k)||'[]');
+    allItems=allItems.concat(data.map(function(i){i._key=k;return i;}));
+  });
+  if(!allItems.length){el.innerHTML='<div class="info-box">저장된 검색 기록이 없습니다.</div>';return;}
+  el.innerHTML=allItems.map(function(item){
+    return '<div class="hist-row" onclick="goSearch(\''+item.keyword.replace(/'/g,"\\'")+'\''+')" style="cursor:pointer;">'
+      +'<span class="hist-kw">'+item.keyword+'</span>'
+      +'<span class="hist-cnt">'+item.count+'건</span>'
+      +'<span class="hist-time">'+item.time+'</span>'
+      +'<span style="font-size:11px;color:var(--blue);margin-left:4px;">검색 ›</span>'
+      +'</div>';
+  }).join('');
+}
+
+function goSearch(keyword){
+  go('s-search');
+  document.getElementById('search-input').value=keyword;
+  doSearch();
+}
+function switchTab(el,tid){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on');});el.classList.add('on');
+  ['t-today2','t-week','t-month'].forEach(function(id){document.getElementById(id).style.display=id===tid?'block':'none';});
+}
+
+// ── ⑤ 오늘 검색목록 ─────────────────────────────────────────────
+function renderTodayList(){
+  var el=document.getElementById('today-list');
+  if(!todayItems.length){el.innerHTML='<div class="info-box">오늘 검색한 내용이 없습니다.</div>';return;}
+  el.innerHTML=todayItems.map(function(item,i){
+    return '<div class="check-item"><input type="checkbox" id="ci'+i+'" checked><div style="flex:1"><label class="check-label" for="ci'+i+'">'+item.keyword+'</label><div class="check-meta">'+item.time+' · '+item.count+'건</div></div><button class="del-btn" onclick="delTodayItem('+i+')">삭제</button></div>';
+  }).join('');
+}
+function delTodayItem(i){todayItems.splice(i,1);saveTodayItems();renderTodayList();}
+function getCheckedItems(){
+  return todayItems.filter(function(_,i){var cb=document.getElementById('ci'+i);return cb&&cb.checked;});
+}
+function openSaveModal(){
+  if(!getCheckedItems().length){alert('체크된 항목이 없습니다.');return;}
+  document.getElementById('save-modal').style.display='block';
+}
+function saveChecked(type){alert(type==='word'?'Word 파일로 저장합니다.':'PDF 파일로 저장합니다.');}
+function saveToCloud(){
+  if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
+  alert('구글 드라이브에 저장합니다.');
+  document.getElementById('save-modal').style.display='none';
+}
+function saveToLocal(){alert('내 기기에 다운로드합니다.');document.getElementById('save-modal').style.display='none';}
+
+// ── 미리보기 + 인쇄 ─────────────────────────────────────────────
+var ppPage=0;var ppPages=[];
+function openPreview(){
+  var checked=getCheckedItems();
+  if(!checked.length){alert('체크된 항목이 없습니다.');return;}
+  ppPages=checked;ppPage=0;
+  go('s-print-preview');
+  // 화면 전환 후 DOM이 완전히 렌더링된 다음 계산
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      updatePP();
+    });
+  });
+}
+function ppChangePage(d){ppPage=Math.max(0,Math.min(ppPages.length-1,ppPage+d));updatePP();}
+function setMarginPreset(v){['top','bot','left','right'].forEach(function(s){document.getElementById('m-'+s).value=v;});updatePP();}
+
+function doPrint(){
+  var mt=+document.getElementById('m-top').value;
+  var mb=+document.getElementById('m-bot').value;
+  var ml=+document.getElementById('m-left').value;
+  var mr=+document.getElementById('m-right').value;
+  var fs=+document.getElementById('pp-font').value;
+
+  var pagesHtml=ppPages.map(function(p,pi){
+    var re=p.keyword?new RegExp(escRe(p.keyword),'gi'):null;
+    function hl(txt){
+      if(!re||!txt) return esc(txt||'');
+      return esc(txt).replace(re,function(m){return '<mark style="background:#fff3b0;color:#7a5000;">'+m+'</mark>';});
+    }
+    var listHtml='';
+    if(p.results&&p.results.length){
+      listHtml=p.results.map(function(r,i){
+        var typeLabel=r.type==='monthly'?'월별서신':r.type==='separate'?'별도서신':'서적';
+        var snippet='';
+        if(r.body&&re){
+          var idx=r.body.search(re);
+          if(idx>=0){
+            var s=Math.max(0,idx-60),e=Math.min(r.body.length,idx+120);
+            snippet=(s>0?'…':'')+r.body.slice(s,e)+(e<r.body.length?'…':'');
+          }
+        }
+        return '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #eee;">'
+          +'<div style="font-weight:600;font-size:'+fs+'pt;">'+(i+1)+'. '+hl(r.name)+'</div>'
+          +'<div style="color:#888;font-size:'+(fs-1)+'pt;margin-bottom:3px;">'+typeLabel+' · '+r.date+'</div>'
+          +(snippet?'<div style="font-size:'+(fs-1)+'pt;color:#444;line-height:1.6;">'+hl(snippet)+'</div>':'')
+          +'</div>';
+      }).join('');
+    }
+    return '<div style="width:210mm;min-height:297mm;padding:'+mt+'mm '+mr+'mm '+mb+'mm '+ml+'mm;'
+      +'font-family:\'Malgun Gothic\',sans-serif;font-size:'+fs+'pt;line-height:1.7;'
+      +'page-break-after:'+(pi<ppPages.length-1?'always':'auto')+';box-sizing:border-box;">'
+      +'<div style="display:flex;justify-content:space-between;font-size:'+(fs-1)+'pt;color:#aaa;border-bottom:1px solid #eee;padding-bottom:4px;margin-bottom:8px;">'
+      +'<span>서신관리프로 Ver.1</span><span>'+today()+'</span></div>'
+      +'<div style="font-size:'+(fs+2)+'pt;font-weight:700;margin-bottom:2px;">검색어: '+esc(p.keyword)+'</div>'
+      +'<div style="font-size:'+(fs-1)+'pt;color:#888;margin-bottom:8px;">'+p.time+' · '+p.count+'건</div>'
+      +'<div style="border-top:1px solid #eee;margin-bottom:10px;"></div>'
+      +listHtml
+      +'<div style="position:fixed;bottom:'+mb+'mm;left:'+ml+'mm;right:'+mr+'mm;'
+      +'display:flex;justify-content:space-between;font-size:'+(fs-2)+'pt;color:#ccc;border-top:1px solid #eee;padding-top:3px;">'
+      +'<span>'+today()+'</span><span>'+(pi+1)+'/'+ppPages.length+'</span></div>'
+      +'</div>';
+  }).join('');
+
+  var win=window.open('','_blank','width=800,height=900');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>서신관리프로 인쇄</title>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{background:#f0f0f0;}'
+    +'@media print{'
+    +'  body{background:#fff;}'
+    +'  @page{margin:0;size:A4;}'
+    +'}</style>'
+    +'</head><body>'
+    +pagesHtml
+    +'<script>window.onload=function(){window.print();}<\/script>'
+    +'</body></html>');
+  win.document.close();
+}
+function updatePP(){
+  var mt=+document.getElementById('m-top').value,mb=+document.getElementById('m-bot').value;
+  var ml=+document.getElementById('m-left').value,mr=+document.getElementById('m-right').value;
+  ['top','bot','left','right'].forEach(function(s){
+    document.getElementById('v-'+s).textContent=document.getElementById('m-'+s).value+'mm';
+  });
+  var page=document.getElementById('a4-page');
+  // offsetWidth가 0이면 부모 기준으로 계산
+  var w=page.offsetWidth||page.parentElement.offsetWidth||300;
+  page.style.aspectRatio='210/297';
+  var scale=w/210;
+  var pmt=Math.round(mt*scale),pmb=Math.round(mb*scale);
+  var pml=Math.round(ml*scale),pmr=Math.round(mr*scale);
+  var fs=+document.getElementById('pp-font').value;
+  var sfs=Math.max(6,Math.round(fs*scale*0.72));
+  var p=ppPages[ppPage]||{keyword:'',time:'',count:0,results:[]};
+  var content=document.getElementById('a4-content');
+  content.style.cssText='position:absolute;top:'+pmt+'px;left:'+pml+'px;right:'+pmr+'px;bottom:'+(pmb+12)+'px;overflow:hidden;';
+
+  var re=p.keyword?new RegExp(escRe(p.keyword),'gi'):null;
+  function hl(txt){
+    if(!re||!txt) return esc(txt||'');
+    return esc(txt).replace(re,function(m){return '<mark style="background:#fff3b0;color:#7a5000;border-radius:2px;padding:0 1px;">'+m+'</mark>';});
+  }
+
+  var headerHtml='<div style="font-size:'+(sfs-1)+'px;color:#999;border-bottom:1px solid #eee;padding-bottom:3px;margin-bottom:6px;display:flex;justify-content:space-between;">'
+    +'<span>서신관리프로 Ver.1</span><span>'+today()+'</span></div>';
+
+  var metaHtml='<div style="font-size:'+(sfs+1)+'px;font-weight:700;color:#111;margin-bottom:2px;">검색어: '+esc(p.keyword)+'</div>'
+    +'<div style="font-size:'+(sfs-1)+'px;color:#999;margin-bottom:6px;">'+p.time+' · '+p.count+'건</div>'
+    +'<div style="border-top:1px solid #eee;margin-bottom:8px;"></div>';
+
+  var listHtml='';
+  if(p.results&&p.results.length){
+    listHtml=p.results.map(function(r,i){
+      var typeLabel=r.type==='monthly'?'월별서신':r.type==='separate'?'별도서신':'서적';
+      var snippet='';
+      if(r.body&&re){
+        var idx=r.body.search(re);
+        if(idx>=0){
+          var s=Math.max(0,idx-40),e=Math.min(r.body.length,idx+80);
+          snippet=(s>0?'…':'')+r.body.slice(s,e)+(e<r.body.length?'…':'');
+        }
+      }
+      return '<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #f4f4f1;">'
+        +'<div style="font-size:'+sfs+'px;font-weight:600;color:#111;">'+(i+1)+'. '+hl(r.name)+'</div>'
+        +'<div style="font-size:'+(sfs-1)+'px;color:#aaa;margin-bottom:2px;">'+typeLabel+' · '+r.date+'</div>'
+        +(snippet?'<div style="font-size:'+(sfs-1)+'px;color:#555;line-height:1.6;">'+hl(snippet)+'</div>':'')
+        +'</div>';
+    }).join('');
+  } else {
+    listHtml='<div style="font-size:'+sfs+'px;color:#bbb;">검색 결과가 없습니다.</div>';
+  }
+
+  content.innerHTML=headerHtml+metaHtml+'<div style="font-size:'+sfs+'px;line-height:1.8;overflow:hidden;">'+listHtml+'</div>';
+
+  var ov=document.getElementById('margin-overlay');
+  ov.innerHTML=
+    '<div style="position:absolute;top:0;left:0;right:0;height:'+pmt+'px;background:rgba(26,115,232,0.08);border-bottom:1px dashed rgba(26,115,232,0.4);"></div>'
+    +'<div style="position:absolute;bottom:0;left:0;right:0;height:'+pmb+'px;background:rgba(26,115,232,0.08);border-top:1px dashed rgba(26,115,232,0.4);"></div>'
+    +'<div style="position:absolute;top:'+pmt+'px;bottom:'+pmb+'px;left:0;width:'+pml+'px;background:rgba(26,115,232,0.08);border-right:1px dashed rgba(26,115,232,0.4);"></div>'
+    +'<div style="position:absolute;top:'+pmt+'px;bottom:'+pmb+'px;right:0;width:'+pmr+'px;background:rgba(26,115,232,0.08);border-left:1px dashed rgba(26,115,232,0.4);"></div>';
+
+  var footer=document.getElementById('a4-footer');
+  footer.style.cssText='position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;font-size:6px;color:#bbb;border-top:1px solid #eee;background:#fff;padding:2px '+pmr+'px 2px '+pml+'px;';
+  footer.innerHTML='<span>'+today()+'</span><span>'+(ppPage+1)+'/'+ppPages.length+'</span>';
+
+  document.getElementById('pp-indicator').textContent=(ppPage+1)+' / '+ppPages.length;
+  document.getElementById('pp-prev').disabled=ppPage===0;
+  document.getElementById('pp-next').disabled=ppPage===ppPages.length-1;
+
+  var dots=document.getElementById('pp-dots');
+  dots.innerHTML=ppPages.map(function(_,i){
+    return '<div onclick="ppPage='+i+';updatePP();" style="width:8px;height:8px;border-radius:50%;cursor:pointer;background:'+(i===ppPage?'#1a73e8':'#ddd')+'"></div>';
+  }).join('');
+  document.getElementById('pp-info').textContent='여백: 위'+mt+'·아래'+mb+'·좌'+ml+'·우'+mr+'mm | 글꼴 '+fs+'pt';
+}
+
+document.getElementById('today-date')&&(document.getElementById('today-date').textContent=new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'}));
+window.addEventListener('resize',function(){if(document.getElementById('s-print-preview').classList.contains('active'))updatePP();});
+
+// 앱 시작 시 저장된 계정이 있으면 자동 로그인 시도
+window.addEventListener('load', function(){
+  setTimeout(function(){
+    if(localStorage.getItem('seoshin_email')){
+      tryAutoLogin();
+    }
+  }, 800); // GSI 라이브러리 로드 대기
+});
+</script>
+</body>
+</html>
