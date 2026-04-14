@@ -6,6 +6,7 @@
 <title>서신관리프로 Ver.1</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
 <script>
 if(typeof pdfjsLib!=='undefined'){
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -22,6 +23,17 @@ if(typeof pdfjsLib!=='undefined'){
 }
 body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:var(--bg);min-height:100vh;color:var(--text);}
 .app{max-width:480px;margin:0 auto;padding:16px;min-height:100vh;}
+/* 태블릿 대응 - 768px 이상이면 너비를 넓게 */
+@media(min-width:768px){
+  .app{max-width:900px;padding:24px 32px;}
+  .main-grid{grid-template-columns:repeat(3,1fr);}
+}
+@media(min-width:1024px){
+  .app{max-width:1100px;padding:28px 48px;}
+  .main-grid{grid-template-columns:repeat(3,1fr);}
+}
+/* PDF 터치 스와이프 */
+#pdf-fs-wrap{touch-action:pan-x pan-y;-webkit-overflow-scrolling:touch;}
 .screen{display:none;}
 .screen.active{display:block;}
 
@@ -316,6 +328,65 @@ label.field-label{font-size:12px;color:var(--text3);display:block;margin-bottom:
 <!-- 복사 완료 토스트 -->
 <div id="copy-toast">✓ 복사됐습니다!</div>
 
+<!-- 워드 편집기 오버레이 -->
+<div id="word-editor" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#f0f4ff;z-index:9998;flex-direction:column;">
+  <!-- 툴바 -->
+  <div style="background:#2b5797;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;">
+    <button onclick="closeWordEditor()" style="padding:6px 14px;border:none;border-radius:20px;background:#1a3d6e;cursor:pointer;font-size:13px;color:#fff;font-weight:600;">✕ 닫기</button>
+    <div style="flex:1;font-size:14px;color:#fff;font-weight:600;">📝 워드 편집기</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <!-- 서식 버튼 -->
+      <button onclick="weExec('bold')" title="굵게" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#fff;font-weight:700;font-size:14px;">B</button>
+      <button onclick="weExec('italic')" title="기울임" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#fff;font-style:italic;font-size:14px;">I</button>
+      <button onclick="weExec('underline')" title="밑줄" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#fff;text-decoration:underline;font-size:14px;">U</button>
+      <button onclick="weExec('strikeThrough')" title="취소선" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#ddd;text-decoration:line-through;font-size:13px;">S</button>
+      <div style="width:1px;background:#4a7cc7;margin:0 2px;"></div>
+      <select onchange="weExec('formatBlock',this.value);this.value=''" style="padding:4px 6px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;color:#fff;font-size:12px;cursor:pointer;">
+        <option value="">단락</option>
+        <option value="h1">제목1</option>
+        <option value="h2">제목2</option>
+        <option value="h3">제목3</option>
+        <option value="p">본문</option>
+      </select>
+      <select onchange="document.getElementById('we-content').style.fontSize=this.value+'pt';this.blur()" style="padding:4px 6px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;color:#fff;font-size:12px;cursor:pointer;width:58px;">
+        <option>크기</option>
+        <option value="9">9pt</option>
+        <option value="10">10pt</option>
+        <option value="11" selected>11pt</option>
+        <option value="12">12pt</option>
+        <option value="14">14pt</option>
+        <option value="16">16pt</option>
+        <option value="18">18pt</option>
+      </select>
+      <div style="width:1px;background:#4a7cc7;margin:0 2px;"></div>
+      <button onclick="weExec('justifyLeft')" title="왼쪽" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#fff;font-size:13px;">≡</button>
+      <button onclick="weExec('justifyCenter')" title="가운데" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#fff;font-size:13px;">☰</button>
+      <button onclick="weExec('insertUnorderedList')" title="목록" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#fff;font-size:13px;">•</button>
+      <div style="width:1px;background:#4a7cc7;margin:0 2px;"></div>
+      <button onclick="weHighlight()" title="형광펜" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#fff3b0;cursor:pointer;font-size:13px;">🖊</button>
+      <button onclick="weExec('removeFormat')" title="서식 지우기" style="width:32px;height:32px;border:1px solid #4a7cc7;border-radius:6px;background:#1a3d6e;cursor:pointer;color:#fff;font-size:11px;">✕T</button>
+      <div style="width:1px;background:#4a7cc7;margin:0 2px;"></div>
+      <button onclick="saveWordFromEditor()" style="padding:6px 14px;border:none;border-radius:20px;background:#27ae60;cursor:pointer;font-size:12px;color:#fff;font-weight:600;">💾 저장</button>
+      <button onclick="saveWordEditorToDrive()" style="padding:6px 14px;border:none;border-radius:20px;background:#1a73e8;cursor:pointer;font-size:12px;color:#fff;font-weight:600;">☁ 드라이브</button>
+    </div>
+  </div>
+  <!-- A4 편집 영역 -->
+  <div style="flex:1;overflow:auto;padding:24px;display:flex;justify-content:center;align-items:flex-start;">
+    <div style="width:210mm;min-height:297mm;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,0.15);border-radius:4px;padding:25mm 20mm;">
+      <div id="we-content"
+        contenteditable="true"
+        style="font-family:'맑은 고딕','Malgun Gothic',sans-serif;font-size:11pt;line-height:1.8;color:#222;min-height:240mm;outline:none;"
+        onkeydown="weHandleKey(event)">
+      </div>
+    </div>
+  </div>
+  <!-- 하단 상태바 -->
+  <div style="background:#1a3d6e;padding:6px 16px;font-size:11px;color:#9ab;display:flex;justify-content:space-between;flex-shrink:0;">
+    <span id="we-wordcount">0 글자</span>
+    <span>Ctrl+S: 저장 &nbsp;|&nbsp; Ctrl+B: 굵게 &nbsp;|&nbsp; Ctrl+Z: 실행취소</span>
+  </div>
+</div>
+
 <!-- 전체화면 PDF 오버레이 -->
 <div id="pdf-fullscreen" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#2d3748;z-index:9999;flex-direction:column;">
   <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#1a202c;flex-shrink:0;flex-wrap:wrap;">
@@ -503,6 +574,7 @@ label.field-label{font-size:12px;color:var(--text3);display:block;margin-bottom:
     </div>
     <div class="bottom-bar" style="margin-top:4px;">
       <button class="half-btn gray" onclick="openSaveModal()" style="font-size:13px;">체크 항목 저장</button>
+      <button class="half-btn gray" onclick="openWordEditor()" style="background:#fff;border-color:#2b5797;color:#2b5797;font-weight:600;font-size:13px;">📝 워드 편집기</button>
     </div>
   </div>
 
@@ -567,7 +639,11 @@ label.field-label{font-size:12px;color:var(--text3);display:block;margin-bottom:
   </div>
   <div class="bottom-bar no-print">
     <button class="half-btn gray" onclick="go('s-today')">← 돌아가기</button>
-    <button class="half-btn blue" onclick="doPrint()">🖨 프린터로 출력</button>
+    <button class="half-btn blue" onclick="doPrint()">🖨 인쇄</button>
+  </div>
+  <div class="bottom-bar no-print" style="margin-top:6px;">
+    <button class="half-btn gray" onclick="saveAsWord()" style="background:#fff;border-color:#2b5797;color:#2b5797;font-weight:600;">📄 Word로 저장</button>
+    <button class="half-btn gray" onclick="saveWordToDrive()" style="background:#e8f0fe;border-color:#1a73e8;color:#1a73e8;font-weight:600;">☁ 드라이브에 저장</button>
   </div>
 </div>
 
@@ -857,28 +933,26 @@ function loadYearList(){
   var el=document.getElementById('list-year-content');
   if(!isSignedIn){el.innerHTML='<div class="info-box">구글 로그인 후 사용 가능합니다.</div>';return;}
   el.innerHTML='<div class="loading">드라이브에서 불러오는 중...</div>';
-  var q="'"+MONTHLY_FOLDER_ID+"' in parents and mimeType='application/pdf' and trashed=false";
-  driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&orderBy=name desc&fields=files(id,name)')
+  // 월별서신
+  var q1="'"+MONTHLY_FOLDER_ID+"' in parents and mimeType='application/pdf' and trashed=false";
+  driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q1)+'&orderBy=name desc&fields=files(id,name)')
     .then(function(r){
       var monthlyBtns=(r.files&&r.files.length)
-        ? r.files.map(function(f){
-            return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';
-          }).join('')
-        : '<div class="info-box" style="margin-bottom:8px;">월별서신이 없습니다.</div>';
-
+        ?r.files.map(function(f){return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';}).join('')
+        :'<div class="info-box" style="margin-bottom:8px;">월별서신이 없습니다.</div>';
+      // 별도서신
       var q2="'"+SEPARATE_FOLDER_ID+"' in parents and mimeType='application/pdf' and trashed=false";
       return driveGet('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q2)+'&orderBy=name desc&fields=files(id,name)')
         .then(function(r2){
           var separateBtns=(r2.files&&r2.files.length)
-            ? r2.files.map(function(f){
-                return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';
-              }).join('')
-            : '<div class="info-box">별도서신이 없습니다.</div>';
+            ?r2.files.map(function(f){return '<button class="sub-btn" onclick="showPdfContent(\''+f.id+'\',\''+f.name+'\',\'s-list\')">'+f.name+'</button>';}).join('')
+            :'<div class="info-box">별도서신이 없습니다.</div>';
           el.innerHTML=
             '<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:6px;">월별서신</div>'+monthlyBtns+
             '<div style="font-size:12px;font-weight:600;color:#555;margin:12px 0 6px;border-top:1px solid #f0f0f0;padding-top:12px;">별도서신</div>'+separateBtns;
         });
     }).catch(function(e){el.innerHTML='<div class="info-box">불러오기 실패: '+e.message+'</div>';});
+}
 }
 function loadMonthList(folderId,year){
   document.getElementById('monthly-title').textContent=year+'년 월별 서신';
@@ -1412,6 +1486,24 @@ function pdfCloseFullscreen(){
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')pdfCloseFullscreen();});
 
+// 터치 스와이프로 페이지 넘기기
+(function(){
+  var startX=0, startY=0;
+  document.getElementById('pdf-fs-wrap') && document.addEventListener('touchstart',function(e){
+    startX=e.touches[0].clientX;
+    startY=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(document.getElementById('pdf-fullscreen').style.display==='none') return;
+    var dx=e.changedTouches[0].clientX-startX;
+    var dy=e.changedTouches[0].clientY-startY;
+    if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>50){
+      if(dx<0) pdfNextPage();  // 왼쪽 스와이프 → 다음 페이지
+      else pdfPrevPage();       // 오른쪽 스와이프 → 이전 페이지
+    }
+  },{passive:true});
+})();
+
 // PDF 텍스트 가독성 정리 (링크 포함)
 function formatPdfText(raw, links){
   var text=raw;
@@ -1523,7 +1615,21 @@ function parsePdfWithLinks(arrayBuffer){
 // ── ③ 서신 저장소 업로드 ────────────────────────────────────────
 function onFileSelect(inputId,nameId){
   var f=document.getElementById(inputId).files[0];
-  if(f) document.getElementById(nameId).textContent=f.name;
+  if(!f) return;
+  // 업로드 영역에 파일명 표시
+  document.getElementById(nameId).textContent=f.name;
+  // 확장자 제거한 파일명
+  var baseName=f.name.replace(/\.pdf$/i,'').replace(/_/g,' ');
+  // 서신 이름 자동 입력 (별도서신)
+  if(inputId==='s-file'){
+    var nameEl=document.getElementById('s-name');
+    if(nameEl&&!nameEl.value) nameEl.value=baseName;
+  }
+  // 서적 제목 자동 입력
+  if(inputId==='b-file'){
+    var titleEl=document.getElementById('b-title');
+    if(titleEl&&!titleEl.value) titleEl.value=baseName;
+  }
 }
 
 function uploadFile(file,folderId,fileName,statusId){
@@ -1809,7 +1915,240 @@ function saveToCloud(){
 }
 function saveToLocal(){alert('내 기기에 다운로드합니다.');document.getElementById('save-modal').style.display='none';}
 
-// ── 미리보기 + 인쇄 ─────────────────────────────────────────────
+// ── 워드 편집기 ──────────────────────────────────────────────────
+function openWordEditor(){
+  var checked=getCheckedItems();
+  if(!checked.length){alert('체크된 항목이 없습니다.');return;}
+
+  // 검색 결과를 편집 가능한 HTML로 변환
+  var html='';
+  checked.forEach(function(p,pi){
+    var re=p.keyword?new RegExp(escRe(p.keyword),'gi'):null;
+    html+='<h2 style="color:#1a73e8;border-bottom:2px solid #1a73e8;padding-bottom:6px;margin-bottom:12px;">검색어: '+esc(p.keyword)+'</h2>';
+    html+='<p style="color:#888;font-size:10pt;margin-bottom:12px;">'+p.time+' · '+p.count+'건</p>';
+    if(p.results&&p.results.length){
+      p.results.forEach(function(r,i){
+        var typeLabel=r.type==='monthly'?'월별서신':r.type==='separate'?'별도서신':'서적';
+        html+='<div style="margin-bottom:14px;padding:10px 14px;border-left:3px solid #1a73e8;background:#f8fbff;">';
+        html+='<p style="font-weight:700;margin-bottom:4px;">'+(i+1)+'. '+esc(r.name)+'</p>';
+        html+='<p style="font-size:10pt;color:#888;margin-bottom:6px;">'+typeLabel+' · '+r.date+(r.author?' · '+esc(r.author):'')+'</p>';
+        if(r.body&&re){
+          var idx=r.body.search(re);
+          if(idx>=0){
+            var s=Math.max(0,idx-100),e=Math.min(r.body.length,idx+200);
+            var snippet=(s>0?'…':'')+r.body.slice(s,e)+(e<r.body.length?'…':'');
+            var hlSnippet=esc(snippet).replace(re,function(m){
+              return '<span style="background:#fff3b0;">'+m+'</span>';
+            });
+            html+='<p style="font-size:10.5pt;line-height:1.7;color:#333;">'+hlSnippet+'</p>';
+          }
+        }
+        html+='</div>';
+      });
+    }
+    if(pi<checked.length-1) html+='<hr style="margin:20px 0;border:none;border-top:1px solid #ddd;">';
+  });
+
+  document.getElementById('we-content').innerHTML=html;
+  document.getElementById('word-editor').style.display='flex';
+  updateWeWordCount();
+}
+
+function closeWordEditor(){
+  document.getElementById('word-editor').style.display='none';
+}
+
+function weExec(cmd,val){
+  document.getElementById('we-content').focus();
+  document.execCommand(cmd,false,val||null);
+  updateWeWordCount();
+}
+
+function weHighlight(){
+  document.getElementById('we-content').focus();
+  document.execCommand('hiliteColor',false,'#fff3b0');
+}
+
+function weHandleKey(e){
+  if(e.ctrlKey||e.metaKey){
+    if(e.key==='s'){e.preventDefault();saveWordFromEditor();}
+  }
+  setTimeout(updateWeWordCount,10);
+}
+
+function updateWeWordCount(){
+  var text=document.getElementById('we-content').innerText||'';
+  document.getElementById('we-wordcount').textContent=text.replace(/\s/g,'').length+'글자 / '+text.split(/\s+/).filter(Boolean).length+'단어';
+}
+
+function saveWordFromEditor(){
+  var fileName='서신검색결과_'+today()+'.doc';
+  var content=document.getElementById('we-content').innerHTML;
+  var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" '
+    +'xmlns:w="urn:schemas-microsoft-com:office:word" '
+    +'xmlns="http://www.w3.org/TR/REC-html40">'
+    +'<head><meta charset="UTF-8">'
+    +'<style>body{font-family:\'맑은 고딕\',sans-serif;font-size:11pt;margin:2cm;line-height:1.8;}</style>'
+    +'<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->'
+    +'</head><body>'+content+'</body></html>';
+  var blob=new Blob(['\ufeff'+html],{type:'application/msword;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download=fileName;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  showCopyToast('📄 '+fileName+' 저장 완료!');
+}
+
+function saveWordEditorToDrive(){
+  if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
+  var fileName='서신검색결과_'+today()+'.doc';
+  var content=document.getElementById('we-content').innerHTML;
+  var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" '
+    +'xmlns:w="urn:schemas-microsoft-com:office:word" '
+    +'xmlns="http://www.w3.org/TR/REC-html40">'
+    +'<head><meta charset="UTF-8">'
+    +'<style>body{font-family:\'맑은 고딕\',sans-serif;font-size:11pt;margin:2cm;line-height:1.8;}</style>'
+    +'</head><body>'+content+'</body></html>';
+  var blob=new Blob(['\ufeff'+html],{type:'application/msword;charset=utf-8'});
+  var meta={name:fileName,parents:[ROOT_FOLDER_ID]};
+  var form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',blob);
+  fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',{
+    method:'POST',headers:{Authorization:'Bearer '+accessToken},body:form
+  }).then(function(r){return r.json();}).then(function(f){
+    showCopyToast('☁ 드라이브에 저장됨: '+f.name);
+  }).catch(function(e){showCopyToast('저장 실패: '+e.message);});
+}
+function buildWordContent(){
+  var items=ppPages;
+  if(!items||!items.length){alert('저장할 내용이 없습니다.');return null;}
+
+  var lines=[];
+  lines.push('서신관리프로 Ver.1 — 검색 결과');
+  lines.push('생성일: '+new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'}));
+  lines.push('');
+  lines.push('═══════════════════════════════════════');
+  lines.push('');
+
+  items.forEach(function(p,pi){
+    lines.push('[검색어: '+p.keyword+']');
+    lines.push('검색 시각: '+p.time+' / 결과 '+p.count+'건');
+    lines.push('');
+    if(p.results&&p.results.length){
+      p.results.forEach(function(r,i){
+        var typeLabel=r.type==='monthly'?'월별서신':r.type==='separate'?'별도서신':'서적';
+        lines.push((i+1)+'. '+r.name);
+        lines.push('   분류: '+typeLabel+' | 날짜: '+r.date);
+        if(r.body){
+          var re=new RegExp(escRe(p.keyword),'i');
+          var idx=r.body.search(re);
+          if(idx>=0){
+            var s=Math.max(0,idx-80);
+            var e=Math.min(r.body.length,idx+160);
+            var snippet=(s>0?'…':'')+r.body.slice(s,e)+(e<r.body.length?'…':'');
+            lines.push('   관련 내용: '+snippet);
+          }
+        }
+        lines.push('');
+      });
+    }
+    if(pi<items.length-1){
+      lines.push('───────────────────────────────────────');
+      lines.push('');
+    }
+  });
+  return lines.join('\r\n');
+}
+
+function saveAsWord(){
+  var content=buildWordContent();
+  if(!content) return;
+
+  var fileName='서신검색결과_'+today()+'.doc';
+
+  // Word가 읽을 수 있는 HTML 형식으로 저장
+  var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" '
+    +'xmlns:w="urn:schemas-microsoft-com:office:word" '
+    +'xmlns="http://www.w3.org/TR/REC-html40">'
+    +'<head><meta charset="UTF-8">'
+    +'<style>'
+    +'body{font-family:\'맑은 고딕\',sans-serif;font-size:11pt;line-height:1.8;margin:2cm;}'
+    +'h1{font-size:14pt;color:#1a73e8;border-bottom:2px solid #1a73e8;padding-bottom:6px;}'
+    +'h2{font-size:12pt;color:#333;margin-top:16pt;}'
+    +'.meta{font-size:9pt;color:#888;margin-bottom:8pt;}'
+    +'.item{margin-bottom:12pt;padding:8pt;border-left:3px solid #1a73e8;background:#f8fbff;}'
+    +'.snippet{font-size:10pt;color:#444;line-height:1.6;margin-top:4pt;}'
+    +'mark{background:#fff3b0;}'
+    +'hr{border:none;border-top:1px solid #ddd;margin:16pt 0;}'
+    +'</style>'
+    +'<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>'
+    +'<w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->'
+    +'</head><body>';
+
+  html+='<h1>서신관리프로 — 검색 결과</h1>';
+  html+='<p class="meta">생성일: '+new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'})+'</p>';
+  html+='<hr>';
+
+  ppPages.forEach(function(p,pi){
+    var re=p.keyword?new RegExp(escRe(p.keyword),'gi'):null;
+    html+='<h2>검색어: '+esc(p.keyword)+'</h2>';
+    html+='<p class="meta">검색 시각: '+p.time+' &nbsp;|&nbsp; 결과 '+p.count+'건</p>';
+    if(p.results&&p.results.length){
+      p.results.forEach(function(r,i){
+        var typeLabel=r.type==='monthly'?'월별서신':r.type==='separate'?'별도서신':'서적';
+        html+='<div class="item">';
+        html+='<strong>'+(i+1)+'. '+esc(r.name)+'</strong>';
+        html+='<p class="meta">'+typeLabel+' &nbsp;·&nbsp; '+r.date+(r.author?' &nbsp;·&nbsp; '+esc(r.author):'')+'</p>';
+        if(r.body&&re){
+          var idx=r.body.search(re);
+          if(idx>=0){
+            var s=Math.max(0,idx-80),e=Math.min(r.body.length,idx+160);
+            var snippet=(s>0?'…':'')+r.body.slice(s,e)+(e<r.body.length?'…':'');
+            var hlSnippet=esc(snippet).replace(re,function(m){return '<mark>'+m+'</mark>';});
+            html+='<p class="snippet">'+hlSnippet+'</p>';
+          }
+        }
+        html+='</div>';
+      });
+    }
+    if(pi<ppPages.length-1) html+='<hr>';
+  });
+
+  html+='</body></html>';
+
+  var blob=new Blob(['\ufeff'+html],{type:'application/msword;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download=fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  showCopyToast('📄 '+fileName+' 다운로드 완료!');
+}
+
+function saveWordToDrive(){
+  if(!isSignedIn){alert('구글 로그인이 필요합니다.');return;}
+  var content=buildWordContent();
+  if(!content) return;
+
+  var fileName='서신검색결과_'+today()+'.txt';
+  var blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+  var meta={name:fileName,parents:[ROOT_FOLDER_ID]};
+  var form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',blob);
+  fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',{
+    method:'POST',headers:{Authorization:'Bearer '+accessToken},body:form
+  }).then(function(r){return r.json();}).then(function(f){
+    showCopyToast('☁ 드라이브에 저장됨: '+f.name);
+  }).catch(function(e){
+    showCopyToast('저장 실패: '+e.message);
+  });
+}
 var ppPage=0;var ppPages=[];
 function openPreview(){
   var checked=getCheckedItems();
